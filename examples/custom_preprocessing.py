@@ -43,6 +43,8 @@ test = an.engin_date(X=test,drop=True)
 ########################################################################
 ################# Encoders #################
 
+# LabelEncoder, OneHotEncoder and InverseFrequency (IDF based) methods with an automatic multicolumn application.
+
 train_df,test_df=train.copy(),test.copy()
 
 cat_cols=list(Analysis(target).cat_cols(X=train_df))
@@ -66,30 +68,9 @@ train_df = encoder.inverse_transform(X = train_df)
 test_df = encoder.inverse_transform(X = test_df)
 
 ########################################################################
-################# Scalers #################
-
-train_df,test_df=train.copy(),test.copy()
-
-num_cols = list(Analysis(target).num_cols(X=train_df))
-
-### Standard Scaler
-scaler = AutoStandardScaler()
-### MinMax Scaler
-scaler = AutoMinMaxScaler()
-### Robust Scaler
-scaler = AutoRobustScaler()
-
-scaler.fit(X=train_df[num_cols])
-
-train_df[num_cols] = scaler.transform(X=train_df[num_cols])
-
-test_df[num_cols] = scaler.transform(X=test_df[num_cols])
-
-test_df[num_cols] = scaler.inverse_transform(X=test_df[num_cols])
-
-
-########################################################################
 ################# Automated Null Imputation [Only numeric features]
+
+# Simplified and automated multivariate null imputation methods based from Sklearn are also provided and applicable, as following:
 
 # Example usage of AutoSimpleImputer
 simple_imputer = AutoSimpleImputer(strategy='mean')
@@ -121,8 +102,28 @@ df_imputed_test.select_dtypes(include=["float","int"]).isnull().sum()
 ########################################################################
 ################# Feature Selection #################
 
+# You can get filter your most valuable features from the dataset via this 2 feature selection methods:
+
+# * H2O AutoML Feature Selection - This method is based of variable importance evaluation and 
+#   calculation for tree-based models in H2Os AutoML and it can be customized by use of the 
+#   following parameters:
+#   * relevance: Minimal value of the total sum of relative variable\feature importance 
+#     percentage selected.
+#   * h2o_fs_models: Quantity of models generated for competition to evaluate the relative 
+#     importance of each feature (only leaderboard model will be selected for evaluation).
+#   * encoding_fs: You can choose if you want to encond your features in order to reduce loading 
+#     time. If in `True` mode label encoding is applied to categorical features.
+
+# * VIF Feature Selection (Variance Inflation Factor) - Variance inflation factor aims at 
+#   measuring the amount of multicollinearity in a set of multiple regression variables or 
+#   features, therefore for this filtering method to be applied all input variables need to be 
+#   of numeric type. It can be customized by changing the column filtering treshold 
+#   `vif_threshold` designated with a default value of 10.
+
 fs = Selector(X = train, target = target)
-cols_vif = fs.feature_selection_vif(vif_threshold = 10.0)                           # X: Only numerical values allowed & No nans allowed
+
 selected_cols, selected_importance = fs.feature_selection_h2o(relevance = 0.98,     # total_vi:float [0.5,1], h2o_fs_models:int [1,100]
                                                               h2o_fs_models = 7,    # encoding_fs:bool=True/False
                                                               encoding_fs = True)
+
+cols_vif = fs.feature_selection_vif(vif_threshold = 10.0)                           # X: Only numerical values allowed & No nans allowed
