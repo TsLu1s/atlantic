@@ -165,7 +165,8 @@ class Atlantic(Selector):
                               test = test,
                               target = self.target).vif_performance(vif_threshold = vif_ratio,
                                                                     perf_ = perf_)
-        self.cols = list(train.columns)
+                                                                    
+        self.cols = [col for col in train.columns if col != self.target]
     
         ### Fit Processors 
         data = data[self.cols]
@@ -239,13 +240,11 @@ class Atlantic(Selector):
         data = Analysis.engin_date(X = data,
                                    drop = True)
         
-        syntetic_target = False
-        if self.target not in list(data.columns):
-            data[self.target] = 0
-            syntetic_target = True
-        
-        data = data[self.cols]
-        
+        if self.target in list(data.columns):
+            data = data[self.cols + [self.target]]
+        else: 
+            data = data[self.cols]
+            
         if len(self.n_cols) > 0:
             data[self.n_cols] = self.scaler.transform(data[self.n_cols])
         if len(self.c_cols) > 0:
@@ -253,8 +252,7 @@ class Atlantic(Selector):
         if self.imp_method != "Undefined" and data[self.c_cols + self.n_cols].isnull().sum().sum() != 0:
             data = self.imputer.transform(data.copy())
     
-        if syntetic_target:
-            data = data.drop(self.target, axis=1)
+
     
         return data
 

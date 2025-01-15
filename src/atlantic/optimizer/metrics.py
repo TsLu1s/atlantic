@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from sklearn.metrics import (mean_absolute_error,
                              mean_absolute_percentage_error,
@@ -33,15 +34,20 @@ def metrics_regression(y_true, y_pred):
 
 def metrics_classification(y_true, y_pred):
     
-    # Calculate various classification model evaluation metrics.
-    accuracy_metric = accuracy_score(y_true, y_pred)
-    precision_metric = precision_score(y_true, y_pred,average='micro')
-    f1_macro_metric = f1_score(y_true, y_pred,average='macro')
-    recall_score_metric = recall_score(y_true, y_pred, average='macro')
+    n_classes = len(np.unique(y_true))
+    average = 'weighted' if n_classes > 2 else 'binary'
     
-    metrics = {'Accuracy': accuracy_metric,
-               'Precision Micro': precision_metric,
-               'F1 Score Macro':f1_macro_metric,
-               'Recall Score Macro':recall_score_metric}
+    # Calculate various classification model evaluation metrics.
+    precision_metric = precision_score(y_true, y_pred, average=average)
+    f1_metric = f1_score(y_true, y_pred, average=average)
+    recall_score_metric = recall_score(y_true, y_pred, average=average)
+    
+    metrics = {'Precision': precision_metric,
+               'F1':f1_metric,
+               'Recall':recall_score_metric}
+    if n_classes > 2 :
+        accuracy_metric = accuracy_score(y_true, y_pred)
+        metrics.update({'Accuracy': accuracy_metric})
+    
     
     return pd.DataFrame(metrics, index=[0])

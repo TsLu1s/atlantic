@@ -295,7 +295,7 @@ class AutoIFrequencyEncoder(BaseEstimator, TransformerMixin):
                 if pd.isna(x):
                     return x
                 closest_log_val = min(sorted_freq_keys, key=lambda log_val: abs(log_val - x))
-                if abs(closest_log_val - x) > 1e-6:  # Threshold to detect if the value is recognized
+                if abs(closest_log_val - x) > 1e-6:  
                     return 'unknown'
                 return inverse_frequency_map[closest_log_val]
             

@@ -19,23 +19,6 @@ class Pattern(Evaluation):
         Provides a sequentially optimized application of methods for selecting optimal encoding and imputation strategies, 
         as well as performing feature selection based on Variance Inflation Factor (VIF).
     
-        Attributes
-        ----------
-        train : pd.DataFrame
-            Training dataset.
-        test : pd.DataFrame
-            Testing dataset.
-        target : str
-            The target variable name.
-        enc_method : str
-            Selected encoding method.
-        imp_method : str
-            Selected imputation method.
-        _imputer : object
-            Selected imputer object.
-        perf : float
-            Performance metric of the selected encoding or imputation method.
-    
         Methods
         -------
         encoding_selection():
@@ -45,6 +28,7 @@ class Pattern(Evaluation):
         vif_performance(vif_threshold=10.0, perf_=None):
             Evaluates the Variance Inflation Factor (VIF) and applies VIF-based feature selection.
         """
+        
     def encoding_selection(self):
         """
         Select the optimal encoding method based on predictive performance.
@@ -53,10 +37,6 @@ class Pattern(Evaluation):
         imputes missing values if necessary, and evaluates the performance of each encoding version.
         The best-performing encoding method is selected and stored in the `enc_method` attribute.
 
-        Returns
-        -------
-        str
-            The selected encoding method.
         """
         # Create an Encoding_Version instance and a SimpleImputer instance.
         ev = Encoding_Version(train = self.train.copy(),
@@ -106,7 +86,7 @@ class Pattern(Evaluation):
         
         p_v1, p_v2, p_v3, p_v4 = performances
         
-        metric = 'MAE' if self.pred_type == 'Reg' else 'ACC'
+        metric = 'MAE' if self.pred_type == 'Reg' else 'F1 Score' if self.n_classes > 2 else 'Precision'
         
         print('\nPredictive Performance Encoding Versions:')
         print(f'\n Version 1 [IFrequency + StandardScaler] : {round(p_v1, 4)}',
@@ -132,7 +112,7 @@ class Pattern(Evaluation):
             self.enc_method = 'Encoding Version 4'  
         self.perf = list_encoding[0]
         
-        print(f'{self.enc_method} was choosen with an', metric, 'of: ', round(self.perf, 4))
+        print(f'{self.enc_method} was selected with a', metric, 'of: ', round(self.perf, 4))
         
         return self.enc_method
         
@@ -144,13 +124,9 @@ class Pattern(Evaluation):
         performs imputation using different imputation strategies, and evaluates their performance.
         The best-performing imputation method is selected and stored in the `imp_method` attribute.
 
-        Returns
-        -------
-        tuple
-            The imputed training and testing imputated datasets.
         """
         # Select the imputation method and assess its performance.
-        metric = 'MAE' if self.pred_type == 'Reg' else 'ACC'
+        metric = 'MAE' if self.pred_type == 'Reg' else 'F1 Score' if self.n_classes > 2 else 'Precision'
         
         ev = Encoding_Version(train=self.train.copy(), test=self.test.copy(), target=self.target)
         # Depending on the selected encoding method, apply the corresponding encoding function.
@@ -223,7 +199,7 @@ class Pattern(Evaluation):
             self.train, self.test,self._imputer=train_iter.copy(),test_iter.copy(),iter_imputer
 
         self.perf = list_imp[0]
-        print(f'{self.imp_method} Imputation Algorithm was chosen with an', metric, 'of:', round(self.perf, 4))
+        print(f'{self.imp_method} Imputation Algorithm was selected with a', metric, 'of:', round(self.perf, 4))
         
         return self.train, self.test
     
@@ -237,17 +213,6 @@ class Pattern(Evaluation):
         It selects features with VIF below the specified threshold and compares performance.
         If performance improves or remains stable, VIF-based feature selection is applied.
 
-        Parameters
-        ----------
-        vif_threshold : float, optional
-            The threshold for VIF to consider features for selection, by default 10.0.
-        perf_ : float, optional
-            The initial performance metric, by default None.
-
-        Returns
-        -------
-        tuple
-            The training and testing datasets after VIF-based feature selection.
         """
 
         train_vif, test_vif = self.train.copy(), self.test.copy()
@@ -286,10 +251,12 @@ class Pattern(Evaluation):
                 apply_vif = True
             
             if apply_vif:
+                print('')
                 print('The VIF filtering method was applied')
                 self.train = self.train[cols_vif]
                 self.test = self.test[cols_vif]
             else:
+                print('')
                 print('The VIF filtering method was not applied')
     
         return self.train, self.test

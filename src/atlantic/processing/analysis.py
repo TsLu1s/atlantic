@@ -1,6 +1,23 @@
+import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
+from dataclasses import dataclass, field
+from typing import Tuple, List, Literal
+
+@dataclass
+class AnalysisConfig:
+    """Configuration for Analysis class containing common parameters and constants."""
+    
+    NUMERIC_TYPES: List[str] = field(default_factory=lambda: [
+        'int', 'int32', 'int64', 'float', 'float32', 'float64'
+    ])
+    DATE_COMPONENTS: List[str] = field(default_factory=lambda: [
+        'day_of_month', 'day_of_week', 'is_wknd', 'month',
+        'day_of_year', 'year', 'hour', 'minute', 'second'
+    ])
+    MIN_SPLIT_RATIO: float = 0.5
+    MAX_SPLIT_RATIO: float = 0.98
 
 class Analysis:
     def __init__(self, target: str = None):
@@ -22,9 +39,30 @@ class Analysis:
         """
         self.target = target
         self._label_encoder = None
-        self.n_dtypes = ['int','int32', 'int64','float','float32', 'float64']
+        self.config = AnalysisConfig()
 
-    def split_dataset(self, X: pd.DataFrame, split_ratio: float = 0.75):
+    def _validate_dataframe(self, X: pd.DataFrame) -> None:
+        """
+        Validate input DataFrame for required properties.
+        
+        Args:
+            X: Input DataFrame to validate
+            
+        Raises:
+            ValueError: If DataFrame validation fails
+        """
+        if not isinstance(X, pd.DataFrame):
+            raise ValueError("Input must be a pandas DataFrame")
+        
+        if self.target is not None:
+            if self.target not in X.columns:
+                raise ValueError(f"Target column '{self.target}' not found in DataFrame")
+
+    def split_dataset(
+            self, 
+            X: pd.DataFrame,
+            split_ratio: float = 0.75
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Splits the dataset into training and testing sets based on the specified split ratio. The method ensures that the split ratio
         is within a sensible range and handles any missing values in the target column by dropping those rows.
@@ -36,28 +74,47 @@ class Analysis:
                              to ensure that both training and testing sets are sufficiently large for meaningful analysis.
         """
         # Splits the dataset into train and test sets based on the split_ratio.
-        assert 0.5 <= split_ratio <= 0.98, 'split_ratio should be in [0.5, 0.98] interval'
-        X = X.dropna(subset=[self.target])
+        if not self.config.MIN_SPLIT_RATIO <= split_ratio <= self.config.MAX_SPLIT_RATIO:
+            raise ValueError(
+                f"split_ratio must be between {self.config.MIN_SPLIT_RATIO} and "
+                f"{self.config.MAX_SPLIT_RATIO}"
+            )
+            
+        self._validate_dataframe(X)
         
-        return train_test_split(X, train_size = split_ratio)
+        if self.target:
+            X = X.dropna(subset=[self.target])
+            
+        if self.pred_type=='Class':
+            return train_test_split(X,
+                                    train_size=split_ratio,
+                                    stratify=X[self.target])
+        else:
+            return train_test_split(X, 
+                                    train_size = split_ratio)
 
-    def divide_dfs(self, train: pd.DataFrame, test: pd.DataFrame):
+    def divide_dfs(
+            self,
+            train: pd.DataFrame,
+            test: pd.DataFrame
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, np.ndarray, np.ndarray]:
         """
-        Divides the training and testing DataFrames into feature sets (X) and target sets (y). It separates the target variable from the
-        features and encodes the target variable if it is categorical.
+        Separate features and target variables from training and testing sets.
         
-        Parameters:
-        train (pd.DataFrame): The DataFrame containing the training data. It includes both features and the target variable.
-        test (pd.DataFrame): The DataFrame containing the testing data. It also includes both features and the target variable.
-        
+        Args:
+            train: Training DataFrame containing features and target
+            test: Testing DataFrame containing features and target
+            
         Returns:
-        tuple: A tuple containing four elements:
-               - X_train (pd.DataFrame): The feature set for the training data.
-               - X_test (pd.DataFrame): The feature set for the testing data.
-               - y_train (pd.Series or np.ndarray): The target set for the training data.
-               - y_test (pd.Series or np.ndarray): The target set for the testing data.
-
+            Tuple containing (X_train, X_test, y_train, y_test)
+            
+        Raises:
+            ValueError: If target is not set or DataFrames are invalid
         """
+            
+        self._validate_dataframe(train)
+        self._validate_dataframe(test)
+        
         X_train, X_test = train.drop(self.target, axis=1), test.drop(self.target, axis=1)
         y_train, y_test = train[self.target], test[self.target]
         
@@ -68,7 +125,7 @@ class Analysis:
         
         return X_train, X_test, y_train, y_test
 
-    def target_type(self, X: pd.DataFrame):
+    def target_type(self, X: pd.DataFrame) -> Tuple[Literal["Reg", "Class"], str]:
         """
         Determines the type of the target variable and the appropriate evaluation metric based on the target's data type.
         If the target variable is numerical, it is considered a regression problem. If it is categorical, it is considered a
@@ -77,74 +134,75 @@ class Analysis:
         Parameters:
         X (pd.DataFrame): The input DataFrame containing the target variable.
         
-        Returns:
-        tuple: A tuple containing two elements:
-               - pred_type (str): The type of prediction task ('Reg' for regression, 'Class' for classification).
-               - eval_metric (str): The default evaluation metric for the prediction task ('Mean Absolute Error' for regression,
-                                    'Accuracy' for classification).
         """
+        self._validate_dataframe(X)
+        
         target_dtype = X[self.target].dtype
         pred_type, eval_metric = 'Reg', 'Mean Absolute Error'
-        if target_dtype not in self.n_dtypes:
-            pred_type, eval_metric = 'Class', 'Accuracy'
+        
+        if target_dtype not in self.config.NUMERIC_TYPES:
+            pred_type, eval_metric = 'Class', 'Precision'
+            self.n_classes = len(pd.unique(X[self.target])) if pred_type == "Class" else None
+            if self.n_classes > 2:
+                eval_metric = "F1"
             
         return pred_type, eval_metric
 
     def num_cols(self, X: pd.DataFrame):
         """
-        Identifies and returns a list of numerical columns in the input DataFrame, excluding the target variable.
+        Get list of numerical columns, excluding target variable.
         
-        Parameters:
-        X (pd.DataFrame): The input DataFrame containing the dataset.
-        
+        Args:
+            X: Input DataFrame
+            
         Returns:
-        list: A list of column names corresponding to numerical columns in the DataFrame, excluding the target variable.
+            List of numerical column names
         """
-        return [col for col in X.select_dtypes(include=self.n_dtypes).columns if col != self.target]
+        return [col for col in X.select_dtypes(include=self.config.NUMERIC_TYPES).columns if col != self.target]
 
     def cat_cols(self, X: pd.DataFrame):
         """
-        Identifies and returns a list of categorical columns in the input DataFrame, excluding the target variable.
+        Get list of categorical columns, excluding target variable.
         
-        Parameters:
-        X (pd.DataFrame): The input DataFrame containing the dataset.
-        
+        Args:
+            X: Input DataFrame
+            
         Returns:
-        list: A list of column names corresponding to categorical columns in the DataFrame, excluding the target variable.
+            List of categorical column names
         """
         return [col for col in X.select_dtypes(include=['object','category']).columns if col != self.target]
 
     @staticmethod
     def remove_columns_by_nulls(X: pd.DataFrame, percentage: float):
         """
-        Removes columns from the DataFrame that have a percentage of null values greater than the specified threshold.
+        Remove columns with null values exceeding specified percentage.
         
-        Parameters:
-        X (pd.DataFrame): The input DataFrame from which columns with excessive null values will be removed.
-        percentage (float): The threshold percentage of null values. Columns with a higher percentage of null values will be removed.
-        
+        Args:
+            X: Input DataFrame
+            percentage: Maximum allowed percentage of null values
+            
         Returns:
-        pd.DataFrame: The DataFrame with columns having excessive null values removed.
+            DataFrame with high-null columns removed
+            
+        Raises:
+            ValueError: If percentage is outside valid range
         """
         min_count = int((1 - percentage / 100) * X.shape[0])
-        X_ = X.dropna(axis = 1, thresh = min_count)
-        
-        return X_
+        return X.dropna(axis=1, thresh=min_count)
     
     @staticmethod
     def engin_date(X: pd.DataFrame, drop: bool = True) -> pd.DataFrame:
         """
-        Engineer date-related features in the input DataFrame. This method extracts various temporal features from
-        datetime columns and optionally drops the original datetime columns.
+        Extract temporal features from datetime columns.
         
-        Parameters:
-        X (pd.DataFrame): The input DataFrame containing datetime columns.
-        drop (bool): If True, the original datetime columns are dropped after feature engineering. Default is True.
-        
+        Args:
+            X: Input DataFrame
+            drop: Whether to drop original datetime columns
+            
         Returns:
-        pd.DataFrame: A DataFrame with the original datetime columns transformed into multiple date-related features.
+            DataFrame with engineered date features
         """
-        
+        X = X.copy()
         # Identify datetime columns in the DataFrame.
         datetime_columns = X.select_dtypes(include=['datetime64[ns]']).columns.tolist()
         
