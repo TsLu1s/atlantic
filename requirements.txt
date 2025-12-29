@@ -1,9 +1,0 @@
-pandas>=1.2.0
-numpy>=1.19.5
-scikit-learn>=1.4.0
-h2o>=3.44.0.1
-xgboost>=1.7.3
-optuna>=2.10.1
-statsmodels>=0.13.2
-
-
