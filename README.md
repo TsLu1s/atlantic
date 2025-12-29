@@ -285,7 +285,7 @@ train = h2o_selector.transform(train)
 test = h2o_selector.transform(test)
 ```
 
-Check out the <a href="https://github.com/TsLu1s/atlantic/blob/main/examples/example_preprocessing_components.py" style="text-decoration:none;">
+Check out the <a href="https://github.com/TsLu1s/atlantic/blob/main/examples/custom_preprocessing.py" style="text-decoration:none;">
     <img src="https://img.shields.io/badge/Custom%20Preprocessing-blue?style=for-the-badge&logo=readme&logoColor=white" alt="Custom Preprocessing">
 </a> for detailed implementations of all preprocessing methods.
 
