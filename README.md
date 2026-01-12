@@ -76,8 +76,10 @@ Import the package, load a dataset, split it, and define your target column name
 | `h2o_fs_models` | Number of models for H2O AutoML feature selection | 7 |
 | `encoding_fs` | Encode categorical features before H2O selection | True |
 | `vif_ratio` | Variance Inflation Factor threshold | 10.0 |
+| `optimization_level` | Optimization intensity: `"fast"`, `"balanced"`, `"thorough"` | "balanced" |
 
 Once fitted, use `data_processing` to transform any future dataframes with the same structure.
+
 ```py
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -102,7 +104,8 @@ atl.fit_processing(
     split_ratio=0.75,
     relevance=0.99,
     h2o_fs_models=7,
-    vif_ratio=10.0
+    vif_ratio=10.0,
+    optimization_level="balanced"
 )
 
 ### Transform Data Processing
