@@ -10,7 +10,7 @@ import warnings
 warnings.filterwarnings("ignore", category=Warning)
 
 from atlantic.data import DatasetGenerator
-from atlantic.pipeline import Atlantic, AtlanticBuilder
+from atlantic.pipeline import AtlanticBuilder
 
 print("=" * 70)
 print("COMPLETE BUILDER PATTERN EXAMPLE")

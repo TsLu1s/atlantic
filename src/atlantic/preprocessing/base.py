@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
 import pandas as pd
 
@@ -14,11 +14,11 @@ if TYPE_CHECKING:
 
 class BaseEncoder(BasePreprocessor):
     """Abstract base class for categorical encoders."""
-    
+
     def __init__(self):
         super().__init__()
         self._encoders: dict = {}
-    
+
     @abstractmethod
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "Self":
         """
@@ -28,7 +28,7 @@ class BaseEncoder(BasePreprocessor):
             Self for method chaining.
         """
         ...
-    
+
     @abstractmethod
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """
@@ -38,7 +38,7 @@ class BaseEncoder(BasePreprocessor):
             DataFrame with encoded columns.
         """
         ...
-    
+
     @abstractmethod
     def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """
@@ -52,11 +52,11 @@ class BaseEncoder(BasePreprocessor):
 
 class BaseScaler(BasePreprocessor):
     """Abstract base class for numerical scalers."""
-    
+
     def __init__(self):
         super().__init__()
         self._scaler = None
-    
+
     @abstractmethod
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "Self":
         """
@@ -66,7 +66,7 @@ class BaseScaler(BasePreprocessor):
             Self for method chaining.
         """
         ...
-    
+
     @abstractmethod
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """
@@ -76,7 +76,7 @@ class BaseScaler(BasePreprocessor):
             DataFrame with scaled columns.
         """
         ...
-    
+
     @abstractmethod
     def inverse_transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """
@@ -90,13 +90,13 @@ class BaseScaler(BasePreprocessor):
 
 class BaseImputer(BasePreprocessor):
     """Abstract base class for null value imputers."""
-    
+
     def __init__(self, target: Optional[str] = None):
         super().__init__()
         self._imputer = None
         self.target = target
         self._numeric_columns: List[str] = []
-    
+
     @abstractmethod
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "Self":
         """
@@ -106,7 +106,7 @@ class BaseImputer(BasePreprocessor):
             Self for method chaining.
         """
         ...
-    
+
     @abstractmethod
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """
@@ -116,12 +116,8 @@ class BaseImputer(BasePreprocessor):
             DataFrame with imputed values.
         """
         ...
-    
-    def impute(
-        self, 
-        train: pd.DataFrame, 
-        test: pd.DataFrame
-    ) -> tuple:
+
+    def impute(self, train: pd.DataFrame, test: pd.DataFrame) -> tuple:
         """
         Fit on train and transform both train and test.
 
@@ -134,13 +130,13 @@ class BaseImputer(BasePreprocessor):
 
 class BaseFeatureSelector(BasePreprocessor):
     """Abstract base class for feature selection methods."""
-    
+
     def __init__(self, target: str):
         super().__init__()
         self.target = target
         self._selected_features: List[str] = []
         self._feature_importance: Optional[pd.DataFrame] = None
-    
+
     @abstractmethod
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "Self":
         """
@@ -150,7 +146,7 @@ class BaseFeatureSelector(BasePreprocessor):
             Self for method chaining.
         """
         ...
-    
+
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """
         Select fitted features from DataFrame.
@@ -159,24 +155,24 @@ class BaseFeatureSelector(BasePreprocessor):
             DataFrame with selected features only.
         """
         self._check_is_fitted()
-        
+
         # Include target if present
         cols = self._selected_features.copy()
         if self.target in X.columns and self.target not in cols:
             cols.append(self.target)
-        
+
         return X[cols]
-    
+
     @property
     def selected_features(self) -> List[str]:
         """Get list of selected feature names."""
         return self._selected_features
-    
+
     @property
     def feature_importance(self) -> Optional[pd.DataFrame]:
         """Get feature importance DataFrame."""
         return self._feature_importance
-    
+
     @property
     def n_selected(self) -> int:
         """Number of selected features."""

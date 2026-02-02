@@ -28,179 +28,136 @@ Example:
 __version__ = "2.0.0"
 __author__ = "Luís Fernando da Silva Santos"
 
+# Core
+from atlantic.core.enums import (
+    DimensionalityTier,
+    EncoderType,
+    EncodingVersion,
+    FeatureSelectorType,
+    ImputerType,
+    OptimizationLevel,
+    ScalerType,
+    TaskType,
+)
+from atlantic.core.exceptions import (
+    AtlanticError,
+    EncodingError,
+    FeatureSelectionError,
+    ImputationError,
+    NotFittedError,
+    ValidationError,
+)
+
+# Analysis (backward compatibility)
+from atlantic.core.mixins import ColumnTypeMixin, DataValidationMixin, DateEngineeringMixin
+from atlantic.core.schemas import FittedComponents, PipelineConfig, PipelineState
+
+# Data
+from atlantic.data.generator import DatasetGenerator
+from atlantic.encoding.optimizer import EncodingOptimizer
+
+# Encoding
+from atlantic.encoding.versions import EncodingVersion, EncodingVersionFactory
+
+# Evaluation
+from atlantic.evaluation.metrics import MetricRegistry, metrics_classification, metrics_regression
+
+# Feature Selection
+from atlantic.feature_selection.h2o_selector import H2OFeatureSelector
+from atlantic.feature_selection.registry import FeatureSelectorRegistry
+from atlantic.feature_selection.vif_selector import VIFFeatureSelector
+
+# Optimization
+from atlantic.optimization.dimensionality import DimensionalityConfig, DimensionalityStrategy
+from atlantic.optimization.evaluation import ModelEvaluator
+from atlantic.optimization.optuna_adapter import OptunaAdapter
+
 # Main pipeline
 from atlantic.pipeline.atlantic import Atlantic
 from atlantic.pipeline.builder import AtlanticBuilder, AtlanticPipeline
 from atlantic.pipeline.pattern import Pattern
 
-# Core
-from atlantic.core.enums import (
-    TaskType,
-    DimensionalityTier,
-    OptimizationLevel,
-    EncodingVersion,
-    ScalerType,
-    EncoderType,
-    ImputerType,
-    FeatureSelectorType
-)
-from atlantic.core.exceptions import (
-    AtlanticError,
-    NotFittedError,
-    ValidationError,
-    FeatureSelectionError,
-    EncodingError,
-    ImputationError
-)
-from atlantic.core.schemas import (
-    PipelineConfig,
-    PipelineState,
-    FittedComponents
-)
-
 # Preprocessing
 from atlantic.preprocessing.encoders import (
+    AutoIFrequencyEncoder,
     AutoLabelEncoder,
     AutoOneHotEncoder,
-    AutoIFrequencyEncoder
 )
-from atlantic.preprocessing.scalers import (
-    AutoMinMaxScaler,
-    AutoStandardScaler,
-    AutoRobustScaler
-)
-from atlantic.preprocessing.imputers import (
-    AutoSimpleImputer,
-    AutoKNNImputer,
-    AutoIterativeImputer
-)
-from atlantic.preprocessing.registry import (
-    EncoderRegistry,
-    ScalerRegistry,
-    ImputerRegistry
-)
-
-# Feature Selection
-from atlantic.feature_selection.h2o_selector import H2OFeatureSelector
-from atlantic.feature_selection.vif_selector import VIFFeatureSelector
-from atlantic.feature_selection.registry import FeatureSelectorRegistry
-
-# Encoding
-from atlantic.encoding.versions import EncodingVersionFactory, EncodingVersion
-from atlantic.encoding.optimizer import EncodingOptimizer
-
-# Evaluation
-from atlantic.evaluation.metrics import (
-    MetricRegistry,
-    metrics_regression,
-    metrics_classification
-)
-
-# Optimization
-from atlantic.optimization.dimensionality import (
-    DimensionalityStrategy,
-    DimensionalityConfig
-)
-from atlantic.optimization.evaluation import ModelEvaluator
-from atlantic.optimization.optuna_adapter import OptunaAdapter
-
-# Data
-from atlantic.data.generator import DatasetGenerator
+from atlantic.preprocessing.imputers import AutoIterativeImputer, AutoKNNImputer, AutoSimpleImputer
+from atlantic.preprocessing.registry import EncoderRegistry, ImputerRegistry, ScalerRegistry
+from atlantic.preprocessing.scalers import AutoMinMaxScaler, AutoRobustScaler, AutoStandardScaler
 
 # State
 from atlantic.state.pipeline_state import StateManager
 
-# Analysis (backward compatibility)
-from atlantic.core.mixins import (
-    DataValidationMixin,
-    ColumnTypeMixin,
-    DateEngineeringMixin
-)
-
-
 __all__ = [
     # Version
-    '__version__',
-    '__author__',
-    
+    "__version__",
+    "__author__",
     # Main pipeline
-    'Atlantic',
-    'AtlanticBuilder',
-    'AtlanticPipeline',
-    'Pattern',
-    
+    "Atlantic",
+    "AtlanticBuilder",
+    "AtlanticPipeline",
+    "Pattern",
     # Enums
-    'TaskType',
-    'DimensionalityTier',
-    'OptimizationLevel',
-    'EncodingVersion',
-    'ScalerType',
-    'EncoderType',
-    'ImputerType',
-    'FeatureSelectorType',
-    
+    "TaskType",
+    "DimensionalityTier",
+    "OptimizationLevel",
+    "EncodingVersion",
+    "ScalerType",
+    "EncoderType",
+    "ImputerType",
+    "FeatureSelectorType",
     # Exceptions
-    'AtlanticError',
-    'NotFittedError',
-    'ValidationError',
-    'FeatureSelectionError',
-    'EncodingError',
-    'ImputationError',
-    
+    "AtlanticError",
+    "NotFittedError",
+    "ValidationError",
+    "FeatureSelectionError",
+    "EncodingError",
+    "ImputationError",
     # Schemas
-    'PipelineConfig',
-    'PipelineState',
-    'FittedComponents',
-    
+    "PipelineConfig",
+    "PipelineState",
+    "FittedComponents",
     # Encoders
-    'AutoLabelEncoder',
-    'AutoOneHotEncoder',
-    'AutoIFrequencyEncoder',
-    
+    "AutoLabelEncoder",
+    "AutoOneHotEncoder",
+    "AutoIFrequencyEncoder",
     # Scalers
-    'AutoMinMaxScaler',
-    'AutoStandardScaler',
-    'AutoRobustScaler',
-    
+    "AutoMinMaxScaler",
+    "AutoStandardScaler",
+    "AutoRobustScaler",
     # Imputers
-    'AutoSimpleImputer',
-    'AutoKNNImputer',
-    'AutoIterativeImputer',
-    
+    "AutoSimpleImputer",
+    "AutoKNNImputer",
+    "AutoIterativeImputer",
     # Registries
-    'EncoderRegistry',
-    'ScalerRegistry',
-    'ImputerRegistry',
-    'FeatureSelectorRegistry',
-    'MetricRegistry',
-    
+    "EncoderRegistry",
+    "ScalerRegistry",
+    "ImputerRegistry",
+    "FeatureSelectorRegistry",
+    "MetricRegistry",
     # Feature Selection
-    'H2OFeatureSelector',
-    'VIFFeatureSelector',
-    
+    "H2OFeatureSelector",
+    "VIFFeatureSelector",
     # Encoding
-    'EncodingVersionFactory',
-    'EncodingVersion',
-    'EncodingOptimizer',
-    
+    "EncodingVersionFactory",
+    "EncodingVersion",
+    "EncodingOptimizer",
     # Evaluation
-    'metrics_regression',
-    'metrics_classification',
-    
+    "metrics_regression",
+    "metrics_classification",
     # Optimization
-    'DimensionalityStrategy',
-    'DimensionalityConfig',
-    'ModelEvaluator',
-    'OptunaAdapter',
-    
+    "DimensionalityStrategy",
+    "DimensionalityConfig",
+    "ModelEvaluator",
+    "OptunaAdapter",
     # Data
-    'DatasetGenerator',
-    
+    "DatasetGenerator",
     # State
-    'StateManager',
-    
+    "StateManager",
     # Mixins
-    'DataValidationMixin',
-    'ColumnTypeMixin',
-    'DateEngineeringMixin'
+    "DataValidationMixin",
+    "ColumnTypeMixin",
+    "DateEngineeringMixin",
 ]

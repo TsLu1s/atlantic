@@ -6,7 +6,7 @@ long_description = (this_directory / "README.md").read_text()
 
 setuptools.setup(
     name="atlantic",
-    version="2.0.27", 
+    version="2.0.30", 
     description="Atlantic is an automated preprocessing framework for supervised machine learning",
     long_description=long_description,      
     long_description_content_type="text/markdown",
@@ -48,4 +48,3 @@ setuptools.setup(
     ],           
     install_requires=open("requirements.txt").readlines(),
 )
-
