@@ -55,8 +55,6 @@ def compute_vif(values: np.ndarray) -> np.ndarray:
     if values.shape[0] < 2 or n_columns == 0:
         return vif
 
-    # Relative tolerance so a column that is constant up to float noise is
-    # still treated as constant.
     scale = np.maximum(np.abs(values).max(axis=0), 1.0)
     varying = np.flatnonzero(values.std(axis=0) > 1e-12 * scale)
     if len(varying) < 2:
@@ -65,8 +63,6 @@ def compute_vif(values: np.ndarray) -> np.ndarray:
     correlation = np.corrcoef(values[:, varying], rowvar=False)
     eigenvalues, eigenvectors = np.linalg.eigh(correlation)
 
-    # diag(R^-1)_i = sum_j V_ij^2 / lambda_j. Eigenvalues at (numerical) zero
-    # mark exact linear dependencies: every column loading on them is infinite.
     tolerance = len(varying) * np.finfo("float64").eps * max(float(eigenvalues.max()), 1.0)
     loadings = eigenvectors**2
     loadings[loadings < _LOADING_TOLERANCE] = 0.0
@@ -141,8 +137,7 @@ class VIFFeatureSelector(BaseFeatureSelector):
         """
         features = [col for col in X.columns if col != self.target]
 
-        # Numeric columns of every width, nullable numerics and booleans all
-        # take part; anything else is passed through.
+        # Get only numerical columns
         cols = [col for col in features if is_numeric_dtype(X[col])]
 
         self._n_input_features = len(cols)
@@ -159,10 +154,7 @@ class VIFFeatureSelector(BaseFeatureSelector):
 
             self._vif_df = self._calculate_vif(X_numeric)
 
-            # Iteratively remove high-VIF features. A VIF of NaN/inf marks a
-            # degenerate column (exact collinearity); such columns are always
-            # removed FIRST - otherwise ``max()`` silently skips NaN and the
-            # loop can terminate while collinearity remains.
+            # Iteratively remove high-VIF features
             while True:
                 vif = self._vif_df["VIF"]
                 sanitized = vif.replace([np.inf, -np.inf], np.nan)

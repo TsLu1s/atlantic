@@ -39,7 +39,6 @@ def test_validation_module_has_no_pandas_as_np_alias():
     import atlantic.utils.validation as v
 
     if hasattr(v, "np"):
-        # If a future patch reintroduces np, it must be numpy, not pandas.
         import numpy as numpy_real
 
         assert v.np is numpy_real, (

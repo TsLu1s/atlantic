@@ -273,10 +273,6 @@ class _AveragedClassificationMetric(BaseMetricStrategy):
 
     def __init__(self, average: str = "weighted"):
         self._average = average
-        # Declared class count for the whole task; when set (by compute_all)
-        # it drives the binary-vs-multiclass averaging decision instead of the
-        # per-batch unique count, so a batch missing a class does not silently
-        # flip the averaging mode.
         self._n_classes: Optional[int] = None
 
     @property
@@ -450,8 +446,6 @@ class MetricRegistry:
             except TypeError:
                 metric = metric_class(average="weighted")
 
-            # Propagate the declared class count so binary-vs-multiclass
-            # averaging is decided from the whole task, not the current batch.
             if n_classes is not None and hasattr(metric, "_n_classes"):
                 metric._n_classes = n_classes
 

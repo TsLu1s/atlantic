@@ -73,15 +73,10 @@ class TestEnums:
         assert OptimizationLevel.THOROUGH.value == "thorough"
 
     def test_encoding_version_type_values(self):
-        # Renamed from EncodingVersion to avoid shadow-collision with the
-        # helper class atlantic.encoding.versions.EncodingVersion.
         assert EncodingVersionType.V1.value == "v1"
         assert EncodingVersionType.V4.value == "v4"
 
     def test_encoding_version_type_is_distinct_from_helper(self):
-        # Regression test for the shadow-import bug: the package-level
-        # ``atlantic.EncodingVersion`` resolves to the helper class, while
-        # ``EncodingVersionType`` resolves to the enum. They are distinct.
         import atlantic
 
         assert atlantic.EncodingVersion is not atlantic.EncodingVersionType

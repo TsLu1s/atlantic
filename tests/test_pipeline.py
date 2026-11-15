@@ -281,8 +281,6 @@ class TestAtlantic:
         must now produce different train/test splits."""
         from atlantic.core.base import BasePipeline
 
-        # Build two Atlantic instances with different seeds and inspect
-        # the train split that ``_split_data`` produces.
         np.random.seed(0)
         n = 200
         df = pd.DataFrame(
@@ -332,8 +330,6 @@ class TestAtlantic:
             }
         )
         split_ratio = 0.75
-        # ``_split_data`` drops null targets and there are none, so the
-        # split sizes are deterministic with our seed:
         expected_train_size = int(round(n * split_ratio))
 
         atl = Atlantic(X=df.copy(), target="target", random_state=42)
@@ -361,10 +357,7 @@ class TestAtlantic:
         assert abs(passed_df.shape[0] - expected_train_size) <= 1, (
             f"Expected ~{expected_train_size} train rows, got {passed_df.shape[0]}"
         )
-        # And it must be PRE-encoded (raw categorical values still present),
-        # not the post-encoding numeric form — otherwise the final encoder
-        # cannot be fit. ``cat_x`` should be a non-numeric dtype regardless
-        # of the pandas version (object / category / str / StringDtype).
+        # Must be pre-encoded (raw categorical values still present)
         cat_dtype = passed_df["cat_x"].dtype
         assert not pd.api.types.is_numeric_dtype(cat_dtype), (
             f"Final processors must be fit on pre-encoded data — got {cat_dtype}"

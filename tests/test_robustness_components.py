@@ -111,8 +111,6 @@ class TestColumnTypeDetection:
         assert get_datetime_columns(typed_df) == ["dt_ns", "dt_s", "dt_tz"]
 
     def test_default_date_range_is_detected(self):
-        # pandas >= 3 creates non-nanosecond datetimes by default; the old
-        # ``select_dtypes("datetime64[ns]")`` detection missed them entirely.
         df = pd.DataFrame({"when": pd.date_range("2024-01-01", periods=4, freq="D")})
         assert get_datetime_columns(df) == ["when"]
 
@@ -182,8 +180,6 @@ class TestDatetimeEngineering:
 
 class TestIFrequencyEncoderRobustness:
     def test_category_dtype_yields_float_output(self):
-        # Previously ``Series.map`` kept the ``category`` dtype, which then
-        # crashed XGBoost inside the automated pipeline.
         df = pd.DataFrame({"c": pd.Categorical(list("aaabbc") * 5)})
         out = AutoIFrequencyEncoder().fit(df).transform(df)
         assert out["c"].dtype == np.float64
@@ -273,8 +269,6 @@ class TestOneHotEncoderRobustness:
 class TestImputerRobustness:
     @pytest.mark.parametrize("imputer_cls", IMPUTERS)
     def test_all_missing_column_is_kept_and_filled(self, imputer_cls):
-        # scikit-learn drops all-NaN features, which used to raise
-        # "Columns must be same length as key" on assignment.
         df = pd.DataFrame(
             {"a": [1.0, np.nan, 3.0, 4.0], "empty": [np.nan] * 4, "b": [2.0, 3.0, np.nan, 5.0]}
         )
@@ -622,8 +616,6 @@ class TestH2OSelector:
         importances = {
             "stacked": None,  # leader without varimp must be skipped
             "gbm": importance_frame(
-                # num_b sits below the 1.5% per-feature cut-off and the other
-                # two already cover more than ``relevance`` of the importance.
                 [("num_a", 9.0, 1.0, 0.60), ("city", 5.0, 0.5, 0.39), ("num_b", 0.1, 0.01, 0.01)]
             ),
         }

@@ -59,8 +59,7 @@ def engineer_datetime_features(
         if col not in X.columns:
             continue
 
-        # Ensure datetime type (no-op for real datetime columns; parses
-        # explicitly requested text/object columns).
+        # Ensure datetime type
         X[col] = pd.to_datetime(X[col])
         day_of_week = X[col].dt.day_of_week + 1
 

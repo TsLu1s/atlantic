@@ -111,8 +111,7 @@ class H2OFeatureSelector(BaseFeatureSelector, TargetTypeMixin):
         self._encoding_before_selection = encoding_before_selection
         self._seed = seed
 
-        # Keys (frames + models) this selector creates in the H2O cluster,
-        # tracked so cleanup can remove ONLY its own state (see _shutdown_h2o).
+        # H2O keys created by this selector, for scoped cleanup
         self._h2o_keys: List[str] = []
 
     def _initialize_h2o(self) -> None:

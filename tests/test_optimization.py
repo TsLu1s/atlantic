@@ -288,7 +288,5 @@ class TestModelEvaluator:
         evaluator = ModelEvaluator(
             train=train, test=test, target="target", optimization_level="fast", verbosity=0
         )
-        # _get_model_instances will raise TypeError under xgboost>=2 if
-        # use_label_encoder is still passed.
         models = evaluator._get_model_instances()
         assert "xgb_classifier" in models

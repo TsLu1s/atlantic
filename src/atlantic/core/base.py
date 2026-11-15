@@ -297,8 +297,6 @@ class BasePipeline(
             return X
 
         null_fraction = X.isnull().mean()
-        # Small tolerance so a column sitting exactly on the threshold is kept
-        # despite floating-point rounding.
         to_drop = null_fraction[(null_fraction > threshold + 1e-12) | (null_fraction >= 1.0)]
         dropped = [col for col in to_drop.index if col != self.target]
 
@@ -392,9 +390,7 @@ class BasePipeline(
         # VIF filtering
         train, test = self._apply_vif_filtering(train, test, vif_ratio)
 
-        # Fit final processors on the pre-encoded training split - never on
-        # the full dataframe (would leak test rows) and never on the
-        # post-encoding train (would lose raw categorical state).
+        # Fit final processors
         self._fit_final_processors(pre_encoded_train)
 
         self._is_fitted = True

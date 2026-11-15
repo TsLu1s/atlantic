@@ -61,10 +61,6 @@ class ImputationConfig(BaseModel):
     iterative_max_iter: int = Field(default=10, ge=1, le=100)
     iterative_random_state: Optional[int] = Field(default=42)
     auto_select: bool = Field(default=True)
-    # Free-form overrides forwarded verbatim to the imputer constructor
-    # (e.g. {"n_neighbors": 5}). Kept separate from the fixed fields above so
-    # builder ``with_imputation(**params)`` kwargs are preserved rather than
-    # being silently dropped by Pydantic's default extra="ignore".
     params: Dict[str, Any] = Field(default_factory=dict)
 
 

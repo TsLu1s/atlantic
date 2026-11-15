@@ -301,8 +301,7 @@ class AtlanticPipeline:
         imp = self._config.imputation
         opt = self._config.optimizer
 
-        # Create Atlantic instance, propagating the configured seed,
-        # parallelism and verbosity.
+        # Create Atlantic instance
         self._is_fitted = False
         self._atlantic = Atlantic(
             X=X,
@@ -315,8 +314,7 @@ class AtlanticPipeline:
         # H2O importance-based selection only runs for method="h2o".
         relevance = feature_selection.h2o_relevance if feature_selection.method == "h2o" else 1.0
 
-        # Fit processing - the full builder configuration is honoured:
-        # date/null/split/encoding/imputation settings all flow through.
+        # Fit processing
         self._atlantic.fit_processing(
             split_ratio=opt.split_ratio,
             relevance=relevance,

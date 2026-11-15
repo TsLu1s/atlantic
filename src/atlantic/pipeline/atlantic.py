@@ -49,8 +49,7 @@ if TYPE_CHECKING:
 
     from atlantic.pipeline.builder import AtlanticBuilder
 
-# Mapping between the human-readable encoding-version labels produced by the
-# auto-optimizer and the canonical version ids used by EncodingVersionFactory.
+# Encoding-version display labels mapped to version ids.
 _DISPLAY_TO_VERSION: Dict[str, str] = {
     "Encoding Version 1": "v1",
     "Encoding Version 2": "v2",
@@ -69,13 +68,9 @@ _SCALER_CHOICES: Tuple[str, ...] = ("standard", "minmax", "robust")
 _ENCODER_CHOICES: Tuple[str, ...] = ("label", "ifrequency")
 _IMPUTER_CHOICES: Tuple[str, ...] = ("simple", "knn", "iterative")
 
-# A numeric target with at most this many distinct integer values triggers a
-# "did you mean classification?" warning.
 _LABEL_LIKE_MAX_UNIQUE: int = 10
 
-# Defaults for attributes introduced after 2.0.30, applied when unpickling a
-# pipeline saved by an older version. ``_datetime_cols=None`` means "detect
-# datetime columns at transform time", which is what older versions did.
+# Defaults for attributes missing from pipelines saved by older versions.
 _STATE_DEFAULTS: Dict[str, Any] = {
     "_date_engineering": True,
     "_date_drop": True,
@@ -155,15 +150,11 @@ class Atlantic(BasePipeline, BuilderPipeline):
         self.scaler = None
         self.imputer = None
 
-        # Resolved scaler/encoder types (registry keys) - drives the final
-        # inference-time transformer construction for both the auto-selected
-        # and the builder-configured paths.
+        # Resolved scaler/encoder registry keys
         self._scaler_type: Optional[str] = None
         self._encoder_type: Optional[str] = None
 
-        # Builder-configuration flags. Defaults reproduce the fully-automated
-        # behaviour used by direct ``Atlantic`` users; the builder overrides
-        # them via ``fit_processing`` keyword arguments.
+        # Builder configuration
         self._auto_encoding: bool = True
         self._auto_imputation: bool = True
         self._manual_scaler: Optional[str] = None
@@ -175,8 +166,6 @@ class Atlantic(BasePipeline, BuilderPipeline):
         self._date_engineering: bool = True
         self._date_drop: bool = True
 
-        # Baseline score carried from the encoding/imputation step into the
-        # VIF comparison.
         self._perf: Optional[float] = None
 
         # Column tracking
@@ -372,8 +361,6 @@ class Atlantic(BasePipeline, BuilderPipeline):
             )
             raise ValidationError(f"Invalid fit_processing configuration - {details}") from e
 
-        # Fail before any expensive work when H2O selection was requested but
-        # the optional dependency is not installed.
         if relevance < 1.0 and not is_h2o_available():
             raise H2OConnectionError(H2O_INSTALL_HINT)
 
@@ -392,9 +379,7 @@ class Atlantic(BasePipeline, BuilderPipeline):
         # Capture the raw input schema for reference/debuggability.
         self._store_input_schema(self.X)
 
-        # Split-independent preparation on a copy (the caller's DataFrame is
-        # never mutated): drop missing-target rows, cast a classification
-        # target, expand/drop datetime columns, prune uninformative columns.
+        # Data preparation
         X_ = self._prepare_data(
             self.X, null_threshold=null_threshold, date_engineering=date_engineering
         )
@@ -409,15 +394,10 @@ class Atlantic(BasePipeline, BuilderPipeline):
         if relevance < 1.0:
             train, test = self._select_features(train, test, relevance, h2o_fs_models, encoding_fs)
 
-        # Snapshot the pre-encoded training rows. The inference-time
-        # scaler+encoder+imputer chain needs to be fit on raw (un-encoded)
-        # data - and only on the training split, since test rows must not
-        # influence transformer state.
+        # Snapshot pre-encoded train split
         pre_encoded_train = train.copy()
 
-        # Encoding + imputation. The fully-automated path (default, and what
-        # direct Atlantic users get) is unchanged; when the builder requests a
-        # specific scaler/encoder/imputer the configured path applies them.
+        # Encoding + imputation
         if auto_encoding and auto_imputation:
             train, test = self._optimize_encoding(train, test, optimization_level)
             train, test = self._optimize_imputation(train, test, optimization_level)
@@ -487,10 +467,6 @@ class Atlantic(BasePipeline, BuilderPipeline):
         self.enc_method = ptn.encoding_selection()
         self._perf = ptn.perf
 
-        # Record the resolved (scaler, encoder) registry keys so the final
-        # inference-time transformers are built from a single source of truth
-        # (EncodingVersionFactory) instead of re-deriving them from the display
-        # string in _fit_final_processors.
         version_id = _DISPLAY_TO_VERSION.get(self.enc_method)
         if version_id is not None:
             self._scaler_type, self._encoder_type = EncodingVersionFactory.get_version_config(
@@ -583,9 +559,6 @@ class Atlantic(BasePipeline, BuilderPipeline):
         if self._auto_imputation:
             return self._select_imputation(train, test, optimization_level)
 
-        # Configured imputer applied verbatim. Any score carried over from the
-        # encoding selection was measured with a different imputer, so it is
-        # discarded and the VIF step recomputes its own baseline.
         self._perf = None
         self.imp_method = _IMPUTER_DISPLAY.get(self._manual_imputer or "simple", "Simple")
         imputer = self._build_imputer(self.imp_method, self._imputer_params)
@@ -651,10 +624,7 @@ class Atlantic(BasePipeline, BuilderPipeline):
                 print("There are no missing values in the Dataset")
             return train, test
 
-        # Run imputation optimization. The encoding selection has already
-        # scored the chosen version with mean imputation on this very split,
-        # seed and optimization level, so that score is reused rather than
-        # recomputed.
+        # Run imputation optimization
         ptn = self._new_pattern(train, test, optimization_level)
         ptn.enc_method = self.enc_method
 
@@ -700,25 +670,19 @@ class Atlantic(BasePipeline, BuilderPipeline):
         self._fitted_components.datetime_columns = list(self._datetime_cols or [])
         self._fitted_components.dropped_columns = dict(self.dropped_columns)
 
-        # Fit scaler on numerical columns using the resolved scaler type
-        # (single source of truth via ScalerRegistry; supports the "robust"
-        # scaler when configured through the builder).
+        # Fit scaler on numerical columns
         if self.n_cols:
             self.scaler = ScalerRegistry.get(self._scaler_type or "standard")
             self.scaler.fit(data[self.n_cols])
             data[self.n_cols] = self.scaler.transform(data[self.n_cols])
 
-        # Fit encoder on categorical columns using the resolved encoder type.
+        # Fit encoder on categorical columns
         if self.c_cols:
             self.encoder = EncoderRegistry.get(self._encoder_type or "ifrequency")
             self.encoder.fit(data[self.c_cols])
             data = self.encoder.transform(data)
 
-        # Fit imputer. ``target`` is propagated so the target column is excluded
-        # from imputation at inference time. A transformer is ALWAYS built: for
-        # imp_method == "Undefined" (null-free training data) _build_imputer
-        # returns a mean SimpleImputer fallback, so inference-time NaNs are
-        # handled instead of flowing untouched into the downstream model.
+        # Fit imputer
         self.imputer = self._build_imputer(self.imp_method, self._imputer_params)
         self.imputer.fit(data)
 
@@ -727,9 +691,7 @@ class Atlantic(BasePipeline, BuilderPipeline):
         self._fitted_components.scaler = self.scaler
         self._fitted_components.imputer = self.imputer
 
-        # Sync pipeline state so metadata export (StateManager.save_metadata /
-        # export_config) reflects the actual fitted components and feature
-        # importance instead of the empty defaults it recorded before.
+        # Sync pipeline state
         self._state.fitted_components = self._fitted_components
         self._state.feature_importance = self.h2o_feature_importance
 
@@ -820,10 +782,7 @@ class Atlantic(BasePipeline, BuilderPipeline):
         if getattr(self, "_date_engineering", True):
             data = engineer_datetime_features(data, columns=datetime_cols, drop_original=True)
 
-        # Validate schema: every fitted feature column must be present after
-        # date engineering. Raise a clear, actionable error listing the missing
-        # columns instead of letting the column selection fail with a bare
-        # KeyError.
+        # Validate schema
         missing = [c for c in self.cols if c not in data.columns]
         if missing:
             fitted_dates = getattr(self, "_datetime_cols", None) or []
@@ -852,11 +811,7 @@ class Atlantic(BasePipeline, BuilderPipeline):
         if self.c_cols and self.encoder is not None:
             data = self.encoder.transform(data)
 
-        # Apply imputer whenever any fitted feature column contains nulls -
-        # regardless of whether an imputation method was "selected" during fit.
-        # A fallback mean imputer is always fitted (see _fit_final_processors),
-        # so inference-time NaNs never flow untouched into the model even when
-        # the training data was null-free.
+        # Apply imputer
         if self.imputer is not None and data[self.cols].isnull().sum().sum() > 0:
             data = self.imputer.transform(data)
 

@@ -87,8 +87,7 @@ class EncodingVersionFactory:
         train_enc = train.copy()
         test_enc = test.copy()
 
-        # Column types come from the shared detection helpers so this routine
-        # and the final inference-time transformers always agree.
+        # Get column types
         num_cols = get_numeric_columns(train, exclude=[target])
         cat_cols = get_categorical_columns(train, exclude=[target])
 

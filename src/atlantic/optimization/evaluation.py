@@ -268,8 +268,6 @@ class ModelEvaluator(ColumnTypeMixin, TargetTypeMixin):
             warnings.simplefilter("ignore")
 
             for model_name, model in models.items():
-                # Extra-large datasets use the "low" complexity profile, where
-                # ExtraTrees is skipped to bound evaluation time.
                 if self._dim_config.model_complexity == "low" and "et_" in model_name:
                     continue
 

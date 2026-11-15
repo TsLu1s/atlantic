@@ -30,9 +30,7 @@ from pandas.api.types import (
     is_string_dtype,
 )
 
-# Legacy dtype-name lists. Kept for backwards compatibility with code that
-# imports them; detection itself no longer relies on these (see module
-# docstring) and uses the ``is_*_column`` predicates below instead.
+# Legacy dtype-name lists, kept for backwards compatibility.
 NUMERIC_TYPES = ["int", "int8", "int16", "int32", "int64", "float", "float16", "float32", "float64"]
 CATEGORICAL_TYPES = ["object", "category"]
 DATETIME_TYPES = ["datetime64[ns]", "datetime64"]
@@ -48,8 +46,6 @@ def _is_categorical_dtype(dtype: Any) -> bool:
 
 
 def _is_boolean(dtype: Any) -> bool:
-    # A categorical whose categories are booleans reports as a bool dtype in
-    # pandas; it is a categorical for our purposes.
     if _is_categorical_dtype(dtype):
         return False
     return bool(is_bool_dtype(dtype))

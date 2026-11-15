@@ -5,7 +5,7 @@ authors:
   given-names: "Luís"
   orcid: "https://orcid.org/0000-0002-4121-1133"
 title: "Atlantic - Automated Preprocessing Framework for Supervised Machine Learning"
-version: 2.0.30
+version: 2.0.31
 doi: ""
 date-released: 2022-09-07
 url: "https://pypi.org/project/atlantic/"

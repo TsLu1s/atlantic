@@ -157,11 +157,7 @@ class Pattern(TargetTypeMixin):
         else:
             self.train, self.test = ev.encoding_v4()
 
-        # Test different imputation methods. Each imputer must receive the
-        # target name so it excludes the target column from
-        # ``_numeric_columns`` - otherwise a numeric regression target would
-        # be imputed at inference time, which would silently overwrite real
-        # target values when transform is run on data with NaNs.
+        # Test different imputation methods
         imputation_methods = {
             "Simple": AutoSimpleImputer(strategy="mean", target=self.target),
             "KNN": AutoKNNImputer(n_neighbors=3, target=self.target),
@@ -239,8 +235,7 @@ class Pattern(TargetTypeMixin):
             vif_selector.fit(train_vif)
             cols_vif = vif_selector.selected_features + [self.target]
         except (ValidationError, np.linalg.LinAlgError) as e:
-            # VIF cannot be computed on this data (e.g. remaining nulls):
-            # keep every column, but say so instead of failing silently.
+            # If VIF fails, keep all columns
             warnings.warn(
                 f"VIF filtering skipped: {e}",
                 UserWarning,

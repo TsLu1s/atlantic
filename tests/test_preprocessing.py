@@ -182,8 +182,7 @@ class TestAutoIFrequencyEncoder:
         training. The fix uses ``max(frequency)`` so unknowns map to the
         smallest in-distribution output.
         """
-        # "A" appears 90 times (most frequent → smallest encoded value),
-        # "B" appears 10 times (rare → largest encoded value)
+        # "A" is frequent (smallest value), "B" is rare (largest value)
         df = pd.DataFrame({"col": ["A"] * 90 + ["B"] * 10})
         enc = AutoIFrequencyEncoder()
         enc.fit(df)
@@ -194,11 +193,8 @@ class TestAutoIFrequencyEncoder:
         unseen_encoded = enc.transform(unseen)
         unseen_val = unseen_encoded.iloc[0, 0]
 
-        # Unknown should map to the smallest training value (most frequent),
-        # never above the maximum training value.
         assert unseen_val <= max_train_val + 1e-9
-        # Specifically, it should equal the encoding of the most-frequent
-        # category ("A").
+        # Unknown maps to the most-frequent category ("A")
         expected = train_encoded.loc[0, "col"]  # "A" encoding
         assert unseen_val == pytest.approx(expected)
 

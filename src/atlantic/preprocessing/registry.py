@@ -85,8 +85,7 @@ class ComponentRegistry(Generic[T]):
         return name.lower() in self._components
 
 
-# Import components for registration (kept below ComponentRegistry on purpose:
-# the registry class must exist before the component modules are loaded).
+# Import components for registration
 from atlantic.preprocessing.encoders import (  # noqa: E402
     AutoIFrequencyEncoder,
     AutoLabelEncoder,

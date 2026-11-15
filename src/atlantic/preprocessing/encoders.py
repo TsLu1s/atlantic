@@ -83,8 +83,7 @@ class AutoLabelEncoder(BaseEncoder):
             le = LabelEncoder()
             le.fit(_as_labels(X[col]))
 
-            # Reserve the last class for unseen values, avoiding a collision
-            # with a genuine training category of the same name.
+            # Reserve the last class for unseen values
             token = self.UNKNOWN_TOKEN
             existing = set(le.classes_.tolist())
             while token in existing:
@@ -111,12 +110,7 @@ class AutoLabelEncoder(BaseEncoder):
         for col in self._columns:
             if col in X_encoded.columns:
                 le = self._label_encoders[col]
-                # Vectorized encoding: build a {class: code} lookup ONCE from
-                # ``classes_`` (code = position in the array, matching
-                # ``inverse_transform``'s ``classes_[code]`` indexing) and map
-                # the whole column in a single pass. Unseen categories fall
-                # back to the reserved unknown code, which is always the last
-                # class.
+                # Vectorized encoding; unseen categories map to the unknown code
                 mapping = {cls: code for code, cls in enumerate(le.classes_)}
                 unknown_code = len(le.classes_) - 1
                 X_encoded[col] = _as_labels(X[col]).map(mapping).fillna(unknown_code).astype(int)
@@ -174,9 +168,7 @@ class AutoOneHotEncoder(BaseEncoder):
 
         for col in self._columns:
             encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
-            # Use np.asarray rather than .values: under pandas>=2.x with
-            # arrow-backed string columns ``.values`` returns an
-            # ArrowStringArray which does not support ``.reshape``.
+            # np.asarray: arrow-backed .values does not support .reshape
             col_2d = np.asarray(_as_object(X[col])).reshape(-1, 1)
             encoder.fit(col_2d)
             self._one_hot_encoders[col] = encoder
@@ -201,11 +193,6 @@ class AutoOneHotEncoder(BaseEncoder):
         for col in self._columns:
             if col in X_encoded.columns:
                 encoder = self._one_hot_encoders[col]
-                # Unknown categories are handled by the underlying sklearn
-                # OneHotEncoder via ``handle_unknown="ignore"`` (set during
-                # fit) - they are encoded as an all-zeros row, which is the
-                # correct one-hot semantics. No manual sentinel column is
-                # needed.
                 col_2d = np.asarray(_as_object(X_encoded[col])).reshape(-1, 1)
                 encoded_col = encoder.transform(col_2d)
 
@@ -227,8 +214,6 @@ class AutoOneHotEncoder(BaseEncoder):
         """
         self._check_is_fitted()
 
-        # Preserve the caller's index so the decoded frame realigns with the
-        # original rows instead of getting a fresh 0..n-1 RangeIndex.
         X_decoded = pd.DataFrame(index=X.index)
 
         for col in self._columns:
@@ -277,9 +262,7 @@ class AutoIFrequencyEncoder(BaseEncoder):
         self._freq_fit = {}
 
         for col in self._columns:
-            # Count on the object view: ``value_counts`` on a ``category``
-            # column would also report unobserved categories with count 0,
-            # which would later divide by zero.
+            # Count on the object view to skip unobserved categories
             self._freq_fit[col] = _as_object(X[col]).value_counts().to_dict()
 
         self._is_fitted = True
@@ -318,9 +301,6 @@ class AutoIFrequencyEncoder(BaseEncoder):
                 frequency_map = self._freq_fit[col]
                 values = _as_object(X[col])
 
-                # Vectorized lookup; unseen categories and missing values both
-                # come back as NaN, then unseen ones get the unknown frequency
-                # while genuinely missing values stay NaN.
                 frequency = pd.to_numeric(values.map(frequency_map), errors="coerce").astype(
                     "float64"
                 )

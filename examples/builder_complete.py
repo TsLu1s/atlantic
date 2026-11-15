@@ -26,7 +26,6 @@ print("=" * 70)
 # =============================================================================
 
 # Dataset with numeric, categorical and datetime columns plus missing values.
-# It is used at the end of the script to fit and apply a built pipeline.
 data_dt, target_dt = DatasetGenerator.generate_with_datetime(
     n_samples=1000, n_numeric=10, n_categorical=3,
     task_type="regression", null_percentage=0.05, random_state=42
@@ -477,9 +476,7 @@ print(f"Columns removed, by reason: {fitted.dropped_columns}")
 print(f"Remaining missing values (train/test): "
       f"{int(train_processed.isnull().sum().sum())}/{int(test_processed.isnull().sum().sum())}")
 
-# Persist the fitted pipeline and reload it later for inference.
-# (The file is a pickle and does not contain the training data. Only load
-# pipeline files that you created or trust.)
+# Persist the fitted pipeline and reload it (only load pickle files you trust).
 no_h2o_pipeline.save("atlantic_builder_pipeline.pkl")
 reloaded = AtlanticPipeline.load("atlantic_builder_pipeline.pkl")
 assert reloaded.transform(test_dt).equals(test_processed)

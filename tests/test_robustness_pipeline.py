@@ -257,7 +257,6 @@ class TestDatetimeHandling:
         assert "'when'" in str(excinfo.value)
 
     def test_date_engineering_disabled(self, quick_eval):
-        # Previously the raw datetime column reached the models and crashed.
         df = with_dates(make_frame())
         atl = fit(df, date_engineering=False)
 
@@ -411,8 +410,6 @@ class TestReproducibilityAndState:
         assert (first.enc_method, first.imp_method) == (second.enc_method, second.imp_method)
         pd.testing.assert_frame_equal(first.data_processing(df), second.data_processing(df))
 
-    # Thread-parallel forests can trip a spurious scikit-learn warning on
-    # Python < 3.14; it is unrelated to what this test checks.
     @pytest.mark.filterwarnings("ignore:.*sklearn.utils.parallel.delayed.*:UserWarning")
     def test_results_do_not_depend_on_n_jobs(self, quick_eval):
         train, test = make_frame(seed=1), make_frame(n=40, seed=2)
@@ -437,9 +434,6 @@ class TestReproducibilityAndState:
         assert models["rf_regressor"].n_jobs is None and models["et_regressor"].n_jobs is None
 
     def test_reused_mean_imputation_score_equals_a_fresh_evaluation(self, quick_eval):
-        # The imputation comparison reuses the score the encoding selection
-        # measured for mean imputation; it must be exactly what a fresh
-        # evaluation of that candidate would produce.
         df = make_frame()
         df.loc[[1, 2, 3, 4, 5], "num_a"] = np.nan
         atl = Atlantic(X=df, target="target", random_state=5, verbosity=0)
@@ -474,8 +468,6 @@ class TestReproducibilityAndState:
             auto_imputation=False,
             imputer="simple",
         )
-        # No score was measured in this configuration: the one from the first
-        # fit must not survive as the VIF baseline.
         assert atl._perf is None
         assert atl.enc_method == "Manual (robust + label)"
         assert atl.is_fitted
@@ -713,8 +705,6 @@ class TestBuilderEndToEnd:
         assert atl.imputer.strategy == "median"
         assert out["target"].tolist() == df["target"].tolist()  # target untouched
         assert out.drop(columns=["target"]).isnull().sum().sum() == 0
-        # Min-max scaled with statistics from the TRAIN split only, so rows
-        # outside that split may fall slightly outside [0, 1].
         assert isinstance(atl.scaler, AutoMinMaxScaler)
         assert out["num_a"].between(-0.5, 1.5).all()
 

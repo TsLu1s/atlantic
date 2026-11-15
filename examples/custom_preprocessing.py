@@ -45,8 +45,6 @@ test = test.reset_index(drop=True)
 print(f"\nDataset Shape: {data.shape}")
 print(f"Target: {target}")
 print("\nColumn Types:")
-# Atlantic's column helpers recognise every numeric width, string/category
-# dtypes and datetimes of any resolution (including timezone-aware ones).
 print(f"  Numeric: {get_numeric_columns(train, exclude=[target])[:5]}...")
 print(f"  Categorical: {get_categorical_columns(train, exclude=[target])}")
 print(f"  Datetime: {get_datetime_columns(train)}")

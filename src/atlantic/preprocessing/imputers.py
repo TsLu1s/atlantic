@@ -81,8 +81,7 @@ class _SklearnImputerAdapter(BaseImputer):
 
         X_transformed = X.copy()
 
-        # ``_fit_columns`` / ``_empty_columns`` are absent on imputers pickled
-        # by older versions, which fitted every numeric column.
+        # Fallback for imputers pickled by older versions
         fit_columns = getattr(self, "_fit_columns", self._numeric_columns)
         empty_columns = getattr(self, "_empty_columns", [])
 
