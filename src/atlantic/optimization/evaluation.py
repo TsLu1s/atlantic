@@ -1,11 +1,18 @@
+"""
+Atlantic - Model Evaluation.
+
+Scores a prepared train/test pair with a small ensemble of tree models whose
+hyperparameters are searched with Optuna. The pipeline uses these scores to
+compare preprocessing candidates (encoding versions, imputers, VIF filtering).
+"""
+
 from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import numpy as np
-import optuna
 import pandas as pd
 import xgboost as xgb
 from sklearn.ensemble import (
@@ -16,16 +23,19 @@ from sklearn.ensemble import (
 )
 from sklearn.preprocessing import LabelEncoder
 
-from atlantic.core.enums import OptimizationLevel, TaskType
+from atlantic.core.enums import TaskType
+from atlantic.core.exceptions import ValidationError
 from atlantic.core.mixins import ColumnTypeMixin, TargetTypeMixin
 from atlantic.evaluation.metrics import MetricRegistry
-from atlantic.optimization.base import BaseOptimizerAdapter
 from atlantic.optimization.dimensionality import (
     DimensionalityConfig,
     DimensionalityStrategy,
     ModelHyperparameterRanges,
 )
 from atlantic.optimization.optuna_adapter import OptunaAdapter
+
+if TYPE_CHECKING:
+    import optuna
 
 
 @dataclass
@@ -109,6 +119,13 @@ class ModelEvaluator(ColumnTypeMixin, TargetTypeMixin):
 
     Supports both regression and classification with automatic
     dimensionality-based configuration.
+
+    Evaluation protocol: every Optuna trial fits each model on ``train`` and
+    scores it on ``test`` (a single hold-out split - no cross-validation).
+    The reported score is the best trial per model, averaged across models.
+    Because the hold-out is also what the trials are ranked on, the score is
+    an optimistic estimate intended for *comparing* preprocessing candidates
+    under identical conditions, not for reporting generalisation performance.
     """
 
     def __init__(
@@ -119,6 +136,7 @@ class ModelEvaluator(ColumnTypeMixin, TargetTypeMixin):
         optimization_level: str = "balanced",
         random_state: int = 42,
         verbosity: int = 0,
+        n_jobs: Optional[int] = None,
     ):
         """
         Initialize ModelEvaluator.
@@ -127,15 +145,23 @@ class ModelEvaluator(ColumnTypeMixin, TargetTypeMixin):
             train: Training DataFrame.
             test: Testing DataFrame.
             target: Target column name.
-            optimization Optimization optimization level.
+            optimization_level: Optimization level ("fast", "balanced", "thorough").
             random_state: Random seed for reproducibility.
             verbosity: Logging verbosity level.
+            n_jobs: Parallelism of the tree models. ``None`` (default) keeps
+                the scikit-learn forests single-threaded and leaves XGBoost on
+                its own default (all cores). ``-1`` also parallelises the
+                forests - faster on mid-sized data, identical results. On
+                Python < 3.14 scikit-learn's thread-based parallelism may emit
+                a spurious "sklearn.utils.parallel.delayed should be used
+                with ..." warning.
         """
         self.train = train
         self.test = test
         self.target = target
         self._random_state = random_state
         self._verbosity = verbosity
+        self._n_jobs = n_jobs
 
         # Detect task type
         self._detect_target_type(train)
@@ -173,25 +199,33 @@ class ModelEvaluator(ColumnTypeMixin, TargetTypeMixin):
         if self.pred_type == "Class":
             self._label_encoder = LabelEncoder()
             y_train = self._label_encoder.fit_transform(y_train)
+
+            unseen = sorted(set(pd.unique(y_test)) - set(self._label_encoder.classes_), key=str)
+            if unseen:
+                raise ValidationError(
+                    f"The test split contains target classes that are absent from the "
+                    f"train split: {unseen}. Every class must appear in train."
+                )
             y_test = self._label_encoder.transform(y_test)
 
         return X_train, X_test, y_train, y_test
 
     def _get_model_instances(self) -> Dict[str, Any]:
         """Get model instances based on task type."""
+        seed, n_jobs = self._random_state, self._n_jobs
         if self.pred_type == "Reg":
             return {
-                "rf_regressor": RandomForestRegressor(random_state=self._random_state),
-                "et_regressor": ExtraTreesRegressor(random_state=self._random_state),
-                "xgb_regressor": xgb.XGBRegressor(random_state=self._random_state, verbosity=0),
+                "rf_regressor": RandomForestRegressor(random_state=seed, n_jobs=n_jobs),
+                "et_regressor": ExtraTreesRegressor(random_state=seed, n_jobs=n_jobs),
+                "xgb_regressor": xgb.XGBRegressor(random_state=seed, n_jobs=n_jobs, verbosity=0),
             }
         return {
-            "rf_classifier": RandomForestClassifier(random_state=self._random_state),
-            "et_classifier": ExtraTreesClassifier(random_state=self._random_state),
+            "rf_classifier": RandomForestClassifier(random_state=seed, n_jobs=n_jobs),
+            "et_classifier": ExtraTreesClassifier(random_state=seed, n_jobs=n_jobs),
             "xgb_classifier": xgb.XGBClassifier(
-                random_state=self._random_state,
+                random_state=seed,
+                n_jobs=n_jobs,
                 verbosity=0,
-                use_label_encoder=False,
                 eval_metric="logloss",
             ),
         }
@@ -234,7 +268,8 @@ class ModelEvaluator(ColumnTypeMixin, TargetTypeMixin):
             warnings.simplefilter("ignore")
 
             for model_name, model in models.items():
-                # Skip extra trees for high complexity
+                # Extra-large datasets use the "low" complexity profile, where
+                # ExtraTrees is skipped to bound evaluation time.
                 if self._dim_config.model_complexity == "low" and "et_" in model_name:
                     continue
 
@@ -271,6 +306,10 @@ class ModelEvaluator(ColumnTypeMixin, TargetTypeMixin):
         # Determine optimization direction
         task_type = TaskType.REGRESSION if self.pred_type == "Reg" else TaskType.CLASSIFICATION
         direction = "minimize" if self.pred_type == "Reg" else "maximize"
+
+        # Start from a clean slate so repeated calls never mix trial results.
+        self.metrics_list = []
+        self.hparameters_list = []
 
         # Create study
         self._optimizer.create_study(direction=direction, study_name=f"{self.pred_type} Evaluation")

@@ -1,74 +1,145 @@
+"""
+Atlantic - Null Value Imputers.
+
+DataFrame-aware adapters around the scikit-learn imputers. They impute the
+numeric columns of a frame (never the target) and leave every other column
+untouched.
+"""
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Optional, Self
+from typing import TYPE_CHECKING, Any, List, Optional
 
-import numpy as np
 import pandas as pd
-from sklearn.experimental import enable_iterative_imputer
+from sklearn.experimental import enable_iterative_imputer  # noqa: F401  (enables IterativeImputer)
 from sklearn.impute import IterativeImputer, KNNImputer, SimpleImputer
 
-from atlantic.core.exceptions import NotFittedError
+from atlantic.core.exceptions import ValidationError
 from atlantic.preprocessing.base import BaseImputer
+from atlantic.utils.columns import get_numeric_columns
+
+if TYPE_CHECKING:
+    from typing import Self
 
 
-class AutoSimpleImputer(BaseImputer):
+class _SklearnImputerAdapter(BaseImputer):
+    """Shared fit / transform logic for the sklearn-backed imputers.
+
+    * Only numeric columns are imputed; the target column is excluded.
+    * A frame with no numeric columns is a valid no-op.
+    * Columns that are entirely missing during fit cannot be modelled; they
+      are kept and filled with ``EMPTY_FILL_VALUE`` instead of being silently
+      dropped by scikit-learn (which would change the output shape).
+    * Transforming a frame that lacks a fitted column raises a clear
+      :class:`ValidationError`.
     """
-    Automatic Simple Imputer for null values.
 
-    Uses sklearn SimpleImputer with configurable strategy.
-    """
+    EMPTY_FILL_VALUE: float = 0.0
 
-    def __init__(self, strategy: str = "mean", target: Optional[str] = None):
-        """
-        Initialize AutoSimpleImputer.
-
-        Args:
-            strategy: Imputation strategy ('mean', 'median', 'most_frequent', 'constant').
-            target: Target column name to exclude from imputation.
-        """
+    def __init__(self, target: Optional[str] = None):
         super().__init__(target)
-        self.strategy = strategy
         self._imputer = None
         self._numeric_columns: List[str] = []
+        self._fit_columns: List[str] = []
+        self._empty_columns: List[str] = []
+
+    def _create_imputer(self) -> Any:
+        """Build the underlying (unfitted) sklearn imputer."""
+        raise NotImplementedError
 
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "Self":
         """
-        Fit SimpleImputer to numerical columns.
+        Fit the imputer to the numerical columns of ``X``.
 
         Returns:
             Self for method chaining.
         """
         X_fit = X.drop(columns=[self.target]) if self.target and self.target in X.columns else X
 
-        self._numeric_columns = X_fit.select_dtypes(include=[np.number]).columns.tolist()
+        self._numeric_columns = get_numeric_columns(X_fit)
+        self._empty_columns = [col for col in self._numeric_columns if X_fit[col].isna().all()]
+        self._fit_columns = [
+            col for col in self._numeric_columns if col not in set(self._empty_columns)
+        ]
+        self._imputer = None
 
-        self._imputer = SimpleImputer(strategy=self.strategy)
-        self._imputer.fit(X_fit[self._numeric_columns])
+        if self._fit_columns:
+            self._imputer = self._create_imputer()
+            self._imputer.fit(X_fit[self._fit_columns])
 
         self._is_fitted = True
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        """Transform data by imputing missing values."""
+        """
+        Transform data by imputing missing values in the fitted numeric columns.
+
+        Returns:
+            DataFrame with imputed values.
+        """
         self._check_is_fitted()
 
         X_transformed = X.copy()
 
-        # Only use numeric columns that exist in X
-        available_cols = [c for c in self._numeric_columns if c in X.columns]
+        # ``_fit_columns`` / ``_empty_columns`` are absent on imputers pickled
+        # by older versions, which fitted every numeric column.
+        fit_columns = getattr(self, "_fit_columns", self._numeric_columns)
+        empty_columns = getattr(self, "_empty_columns", [])
 
-        if available_cols:
-            imputed_numeric = self._imputer.transform(X[available_cols])
-            X_transformed[available_cols] = imputed_numeric
+        missing = [col for col in self._numeric_columns if col not in X.columns]
+        if missing:
+            raise ValidationError(
+                f"{type(self).__name__} was fitted on columns that are missing "
+                f"from the input: {missing}"
+            )
+
+        if fit_columns and self._imputer is not None:
+            X_transformed[fit_columns] = self._imputer.transform(X[fit_columns])
+
+        for col in empty_columns:
+            X_transformed[col] = X[col].astype("float64").fillna(self.EMPTY_FILL_VALUE)
 
         return X_transformed
 
 
-class AutoKNNImputer(BaseImputer):
+class AutoSimpleImputer(_SklearnImputerAdapter):
+    """
+    Automatic Simple Imputer for null values.
+
+    Uses sklearn SimpleImputer with configurable strategy.
+    """
+
+    def __init__(
+        self,
+        strategy: str = "mean",
+        target: Optional[str] = None,
+        fill_value: Optional[Any] = None,
+    ):
+        """
+        Initialize AutoSimpleImputer.
+
+        Args:
+            strategy: Imputation strategy ('mean', 'median', 'most_frequent', 'constant').
+            target: Target column name to exclude from imputation.
+            fill_value: Value used when ``strategy="constant"``.
+        """
+        super().__init__(target)
+        self.strategy = strategy
+        self.fill_value = fill_value
+
+    def _create_imputer(self) -> SimpleImputer:
+        return SimpleImputer(strategy=self.strategy, fill_value=getattr(self, "fill_value", None))
+
+
+class AutoKNNImputer(_SklearnImputerAdapter):
     """
     Automatic KNN Imputer for null values.
 
     Uses sklearn KNNImputer with configurable neighbors.
+
+    Note:
+        KNN imputation computes pairwise distances and scales quadratically
+        with the number of rows; expect it to dominate runtime on large data.
     """
 
     def __init__(
@@ -85,43 +156,12 @@ class AutoKNNImputer(BaseImputer):
         super().__init__(target)
         self.n_neighbors = n_neighbors
         self.weights = weights
-        self._imputer = None
-        self._numeric_columns: List[str] = []
 
-    def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "Self":
-        """
-        Fit KNNImputer to numerical columns.
-
-        Returns:
-            Self for method chaining.
-        """
-        X_fit = X.drop(columns=[self.target]) if self.target and self.target in X.columns else X
-
-        self._numeric_columns = X_fit.select_dtypes(include=[np.number]).columns.tolist()
-
-        self._imputer = KNNImputer(n_neighbors=self.n_neighbors, weights=self.weights)
-        self._imputer.fit(X_fit[self._numeric_columns])
-
-        self._is_fitted = True
-        return self
-
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        """Transform data by imputing missing values using KNN."""
-        self._check_is_fitted()
-
-        X_transformed = X.copy()
-
-        # Only use numeric columns that exist in X
-        available_cols = [c for c in self._numeric_columns if c in X.columns]
-
-        if available_cols:
-            imputed_numeric = self._imputer.transform(X[available_cols])
-            X_transformed[available_cols] = imputed_numeric
-
-        return X_transformed
+    def _create_imputer(self) -> KNNImputer:
+        return KNNImputer(n_neighbors=self.n_neighbors, weights=self.weights)
 
 
-class AutoIterativeImputer(BaseImputer):
+class AutoIterativeImputer(_SklearnImputerAdapter):
     """
     Automatic Iterative Imputer for null values.
 
@@ -151,47 +191,11 @@ class AutoIterativeImputer(BaseImputer):
         self.random_state = random_state
         self.initial_strategy = initial_strategy
         self.imputation_order = imputation_order
-        self._imputer = None
-        self._numeric_columns: List[str] = []
 
-    def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "Self":
-        """
-        Fit IterativeImputer to numerical columns.
-
-        Returns:
-            Self for method chaining.
-        """
-        X_fit = X.drop(columns=[self.target]) if self.target and self.target in X.columns else X
-
-        self._numeric_columns = X_fit.select_dtypes(include=[np.number]).columns.tolist()
-
-        self._imputer = IterativeImputer(
+    def _create_imputer(self) -> IterativeImputer:
+        return IterativeImputer(
             max_iter=self.max_iter,
             random_state=self.random_state,
             initial_strategy=self.initial_strategy,
             imputation_order=self.imputation_order,
         )
-        self._imputer.fit(X_fit[self._numeric_columns])
-
-        self._is_fitted = True
-        return self
-
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        """
-        Transform data by imputing missing values iteratively.
-
-        Returns:
-            DataFrame with imputed values.
-        """
-        self._check_is_fitted()
-
-        X_transformed = X.copy()
-
-        # Only use numeric columns that exist in X
-        available_cols = [c for c in self._numeric_columns if c in X.columns]
-
-        if available_cols:
-            imputed_numeric = self._imputer.transform(X[available_cols])
-            X_transformed[available_cols] = imputed_numeric
-
-        return X_transformed

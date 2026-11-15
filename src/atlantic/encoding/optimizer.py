@@ -1,6 +1,13 @@
+"""
+Atlantic - Encoding Optimizer.
+
+Scores every encoding version on the same train/test split and keeps the
+best one.
+"""
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import pandas as pd
 from tqdm import tqdm
@@ -11,6 +18,7 @@ from atlantic.encoding.versions import EncodingVersion, EncodingVersionFactory
 from atlantic.evaluation.metrics import MetricRegistry
 from atlantic.optimization.evaluation import ModelEvaluator
 from atlantic.preprocessing.imputers import AutoSimpleImputer
+from atlantic.utils.columns import is_numeric_target
 
 
 class EncodingOptimizer:
@@ -21,28 +29,39 @@ class EncodingOptimizer:
     based on model performance.
     """
 
-    def __init__(self, target: str, optimization_level: str = "balanced", verbosity: int = 1):
+    def __init__(
+        self,
+        target: str,
+        optimization_level: str = "balanced",
+        verbosity: int = 1,
+        random_state: int = 42,
+        n_jobs: Optional[int] = None,
+    ):
         """
         Initialize EncodingOptimizer.
 
         Args:
             target: Target column name.
-            optimization Optimization optimization level.
+            optimization_level: Optimization level ("fast", "balanced", "thorough").
             verbosity: Logging verbosity (0=silent, 1=progress, 2=detailed).
+            random_state: Seed for the model evaluation of every version.
+            n_jobs: Parallelism of the evaluation models (see ``ModelEvaluator``).
         """
         self.target = target
         self._optimization_level = optimization_level
         self._verbosity = verbosity
+        self._random_state = random_state
+        self._n_jobs = n_jobs
         self._selected_version: Optional[str] = None
         self._performance_scores: Dict[str, float] = {}
         self._pred_type: Optional[str] = None
         self._n_classes: Optional[int] = None
 
     def _detect_task_type(self, train: pd.DataFrame) -> None:
-        """Detect prediction task type."""
-        target_dtype = train[self.target].dtype
-
-        if target_dtype in ["int", "int32", "int64", "float", "float32", "float64"]:
+        """Detect prediction task type via the shared ``is_numeric_target``
+        helper so nullable/narrow/unsigned numeric targets are classified
+        consistently with the rest of the package."""
+        if is_numeric_target(train[self.target]):
             self._pred_type = "Reg"
             self._n_classes = None
         else:
@@ -76,6 +95,7 @@ class EncodingOptimizer:
         """
         self._detect_task_type(train)
         eval_metric = self._get_eval_metric()
+        self._performance_scores = {}
 
         # Create encoding version helper
         ev = EncodingVersion(train.copy(), test.copy(), self.target)
@@ -116,11 +136,13 @@ class EncodingOptimizer:
                 test=test_enc,
                 target=self.target,
                 optimization_level=self._optimization_level,
+                random_state=self._random_state,
                 verbosity=0,
+                n_jobs=self._n_jobs,
             )
 
             metrics = evaluator.auto_evaluate()
-            score = metrics[eval_metric].iloc[0]
+            score = float(metrics[eval_metric].iloc[0])
             self._performance_scores[version_name] = score
 
         # Select best version

@@ -1,13 +1,18 @@
+"""
+Atlantic - Encoding Versions.
+
+Predefined scaler + encoder combinations ("encoding versions") and the single
+routine that applies a combination to a train/test pair without leakage.
+"""
+
 from __future__ import annotations
 
 from typing import Dict, List, Tuple
 
 import pandas as pd
 
-from atlantic.core.enums import EncodingVersion
-from atlantic.preprocessing.encoders import AutoIFrequencyEncoder, AutoLabelEncoder
 from atlantic.preprocessing.registry import EncoderRegistry, ScalerRegistry
-from atlantic.preprocessing.scalers import AutoMinMaxScaler, AutoStandardScaler
+from atlantic.utils.columns import get_categorical_columns, get_numeric_columns
 
 
 class EncodingVersionFactory:
@@ -59,23 +64,33 @@ class EncodingVersionFactory:
             Tuple of (encoded_train, encoded_test).
         """
         scaler_type, encoder_type = cls.get_version_config(version)
+        return cls.apply_types(train, test, target, scaler_type, encoder_type)
 
+    @staticmethod
+    def apply_types(
+        train: pd.DataFrame,
+        test: pd.DataFrame,
+        target: str,
+        scaler_type: str,
+        encoder_type: str,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Apply an explicit scaler + encoder combination to train and test data.
+
+        Accepts any registered scaler (including ``"robust"``) and any
+        same-shape encoder. Both transformers are fitted on ``train`` only and
+        then applied to both frames; the target column is never touched.
+
+        Returns:
+            Tuple of (encoded_train, encoded_test).
+        """
         train_enc = train.copy()
         test_enc = test.copy()
 
-        # Get column types
-        num_cols = [
-            col
-            for col in train.select_dtypes(
-                include=["int", "int32", "int64", "float", "float32", "float64"]
-            ).columns
-            if col != target
-        ]
-        cat_cols = [
-            col
-            for col in train.select_dtypes(include=["object", "category"]).columns
-            if col != target
-        ]
+        # Column types come from the shared detection helpers so this routine
+        # and the final inference-time transformers always agree.
+        num_cols = get_numeric_columns(train, exclude=[target])
+        cat_cols = get_categorical_columns(train, exclude=[target])
 
         # Apply scaler to numerical columns
         if num_cols:
@@ -142,18 +157,8 @@ class EncodingVersion:
         self.target = target
 
         # Identify column types
-        self.cat_cols = [
-            col
-            for col in train.select_dtypes(include=["object", "category"]).columns
-            if col != target
-        ]
-        self.num_cols = [
-            col
-            for col in train.select_dtypes(
-                include=["int", "int32", "int64", "float", "float32", "float64"]
-            ).columns
-            if col != target
-        ]
+        self.cat_cols = get_categorical_columns(train, exclude=[target])
+        self.num_cols = get_numeric_columns(train, exclude=[target])
 
     def encoding_v1(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Apply Version 1: StandardScaler + IFrequencyEncoder."""

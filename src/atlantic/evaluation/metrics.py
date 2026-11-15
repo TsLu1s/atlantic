@@ -1,3 +1,10 @@
+"""
+Atlantic - Evaluation Metrics.
+
+Metric strategies, the metric registry and convenience functions for
+regression and classification scoring.
+"""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -231,11 +238,66 @@ class MaxErrorMetric(BaseMetricStrategy):
 # =============================================================================
 
 
-class PrecisionMetric(BaseMetricStrategy):
-    """Precision metric."""
+def _averaging_kwargs(
+    y_true: np.ndarray, y_pred: np.ndarray, n_classes: int, average: str
+) -> Dict[str, Any]:
+    """Resolve the averaging mode (and positive label) for precision/recall/F1.
+
+    Multi-class tasks use the configured ``average``. Binary tasks use
+    ``average="binary"``, whose scikit-learn default positive label is ``1``.
+    When ``1`` is not one of the labels (string labels such as
+    ``"yes"``/``"no"``, or integer codes like ``0``/``2``) the positive class
+    is the last label in sorted order - the same convention ``LabelEncoder``
+    produces - instead of failing with ``pos_label=1 is not a valid label``.
+    """
+    if n_classes != 2:
+        return {"average": average}
+
+    labels = pd.unique(
+        np.concatenate(
+            [np.asarray(y_true, dtype=object).ravel(), np.asarray(y_pred, dtype=object).ravel()]
+        )
+    )
+    if len(labels) == 0 or any(label == 1 for label in labels):
+        return {"average": "binary"}
+
+    try:
+        ordered = sorted(labels)
+    except TypeError:  # mixed label types
+        ordered = sorted(labels, key=str)
+    return {"average": "binary", "pos_label": ordered[-1]}
+
+
+class _AveragedClassificationMetric(BaseMetricStrategy):
+    """Shared behaviour for precision / recall / F1."""
 
     def __init__(self, average: str = "weighted"):
         self._average = average
+        # Declared class count for the whole task; when set (by compute_all)
+        # it drives the binary-vs-multiclass averaging decision instead of the
+        # per-batch unique count, so a batch missing a class does not silently
+        # flip the averaging mode.
+        self._n_classes: Optional[int] = None
+
+    @property
+    def greater_is_better(self) -> bool:
+        return True
+
+    @property
+    def task_type(self) -> TaskType:
+        return TaskType.CLASSIFICATION
+
+    def _score(self, y_true: np.ndarray, y_pred: np.ndarray, **kwargs: Any) -> float:
+        raise NotImplementedError
+
+    def compute(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
+        n_classes = self._n_classes if self._n_classes is not None else len(np.unique(y_true))
+        kwargs = _averaging_kwargs(y_true, y_pred, n_classes, self._average)
+        return float(self._score(y_true, y_pred, zero_division=0, **kwargs))
+
+
+class PrecisionMetric(_AveragedClassificationMetric):
+    """Precision metric."""
 
     @property
     def name(self) -> str:
@@ -245,25 +307,12 @@ class PrecisionMetric(BaseMetricStrategy):
     def key(self) -> str:
         return "precision"
 
-    @property
-    def greater_is_better(self) -> bool:
-        return True
-
-    @property
-    def task_type(self) -> TaskType:
-        return TaskType.CLASSIFICATION
-
-    def compute(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
-        n_classes = len(np.unique(y_true))
-        avg = "binary" if n_classes == 2 else self._average
-        return float(precision_score(y_true, y_pred, average=avg, zero_division=0))
+    def _score(self, y_true: np.ndarray, y_pred: np.ndarray, **kwargs: Any) -> float:
+        return precision_score(y_true, y_pred, **kwargs)
 
 
-class RecallMetric(BaseMetricStrategy):
+class RecallMetric(_AveragedClassificationMetric):
     """Recall metric."""
-
-    def __init__(self, average: str = "weighted"):
-        self._average = average
 
     @property
     def name(self) -> str:
@@ -273,25 +322,12 @@ class RecallMetric(BaseMetricStrategy):
     def key(self) -> str:
         return "recall"
 
-    @property
-    def greater_is_better(self) -> bool:
-        return True
-
-    @property
-    def task_type(self) -> TaskType:
-        return TaskType.CLASSIFICATION
-
-    def compute(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
-        n_classes = len(np.unique(y_true))
-        avg = "binary" if n_classes == 2 else self._average
-        return float(recall_score(y_true, y_pred, average=avg, zero_division=0))
+    def _score(self, y_true: np.ndarray, y_pred: np.ndarray, **kwargs: Any) -> float:
+        return recall_score(y_true, y_pred, **kwargs)
 
 
-class F1Metric(BaseMetricStrategy):
+class F1Metric(_AveragedClassificationMetric):
     """F1 Score metric."""
-
-    def __init__(self, average: str = "weighted"):
-        self._average = average
 
     @property
     def name(self) -> str:
@@ -301,18 +337,8 @@ class F1Metric(BaseMetricStrategy):
     def key(self) -> str:
         return "f1"
 
-    @property
-    def greater_is_better(self) -> bool:
-        return True
-
-    @property
-    def task_type(self) -> TaskType:
-        return TaskType.CLASSIFICATION
-
-    def compute(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
-        n_classes = len(np.unique(y_true))
-        avg = "binary" if n_classes == 2 else self._average
-        return float(f1_score(y_true, y_pred, average=avg, zero_division=0))
+    def _score(self, y_true: np.ndarray, y_pred: np.ndarray, **kwargs: Any) -> float:
+        return f1_score(y_true, y_pred, **kwargs)
 
 
 class AccuracyMetric(BaseMetricStrategy):
@@ -418,14 +444,16 @@ class MetricRegistry:
         )
 
         results = {}
-        for key, metric_class in registry.items():
-            if key == "accuracy" and n_classes == 2:
-                continue
-
+        for metric_class in registry.values():
             try:
                 metric = metric_class()
             except TypeError:
                 metric = metric_class(average="weighted")
+
+            # Propagate the declared class count so binary-vs-multiclass
+            # averaging is decided from the whole task, not the current batch.
+            if n_classes is not None and hasattr(metric, "_n_classes"):
+                metric._n_classes = n_classes
 
             results[metric.name] = metric.compute(y_true, y_pred)
 

@@ -1,19 +1,39 @@
+"""
+Atlantic - Reusable Mixins.
+
+Thin, stateless helpers shared by the pipeline, the evaluators and the
+feature selectors. Column-type detection and datetime engineering delegate to
+:mod:`atlantic.utils.columns` / :mod:`atlantic.utils.datetime`, which are the
+single implementations of that logic.
+"""
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List
+from typing import List, Optional, Tuple
 
 import pandas as pd
 
 from atlantic.core.exceptions import ValidationError
+from atlantic.utils.columns import CATEGORICAL_TYPES as _CATEGORICAL_TYPES
+from atlantic.utils.columns import DATETIME_TYPES as _DATETIME_TYPES
+from atlantic.utils.columns import NUMERIC_TYPES as _NUMERIC_TYPES
+from atlantic.utils.columns import (
+    get_categorical_columns,
+    get_datetime_columns,
+    get_numeric_columns,
+    is_numeric_target,
+)
+from atlantic.utils.datetime import DATE_COMPONENTS as _DATE_COMPONENTS
+from atlantic.utils.datetime import engineer_datetime_features
 
-if TYPE_CHECKING:
-    pass
+SPLIT_RATIO_MIN: float = 0.5
+SPLIT_RATIO_MAX: float = 0.98
 
 
 class DataValidationMixin:
     """Mixin for DataFrame validation."""
 
-    target: str  # Expected to be defined in the implementing class
+    target: Optional[str]  # Expected to be defined in the implementing class
 
     def _validate_dataframe(self, X: pd.DataFrame, require_target: bool = True) -> None:
         """
@@ -32,12 +52,12 @@ class DataValidationMixin:
         if X.empty:
             raise ValidationError("Input DataFrame is empty")
 
-        if require_target and hasattr(self, "target") and self.target:
-            if self.target not in X.columns:
-                raise ValidationError(
-                    f"Target column '{self.target}' not found in DataFrame. "
-                    f"Available columns: {list(X.columns)}"
-                )
+        target = getattr(self, "target", None)
+        if require_target and target and target not in X.columns:
+            raise ValidationError(
+                f"Target column '{target}' not found in DataFrame. "
+                f"Available columns: {list(X.columns)}"
+            )
 
     def _validate_split_ratio(self, ratio: float) -> None:
         """
@@ -46,8 +66,10 @@ class DataValidationMixin:
         Raises:
             ValidationError: If ratio is out of valid range.
         """
-        if not 0.5 <= ratio <= 0.98:
-            raise ValidationError(f"split_ratio must be between 0.5 and 0.98, got {ratio}")
+        if not SPLIT_RATIO_MIN <= ratio <= SPLIT_RATIO_MAX:
+            raise ValidationError(
+                f"split_ratio must be between {SPLIT_RATIO_MIN} and {SPLIT_RATIO_MAX}, got {ratio}"
+            )
 
     def _validate_columns_exist(self, X: pd.DataFrame, columns: List[str]) -> None:
         """
@@ -62,23 +84,22 @@ class DataValidationMixin:
 
 
 class ColumnTypeMixin:
-    """Mixin for column type detection."""
+    """Mixin for column type detection.
 
-    NUMERIC_TYPES: List[str] = [
-        "int",
-        "int8",
-        "int16",
-        "int32",
-        "int64",
-        "float",
-        "float16",
-        "float32",
-        "float64",
-    ]
-    CATEGORICAL_TYPES: List[str] = ["object", "category"]
-    DATETIME_TYPES: List[str] = ["datetime64[ns]", "datetime64"]
+    Detection delegates to :mod:`atlantic.utils.columns`. The ``*_TYPES``
+    class attributes are legacy dtype-name lists kept for backwards
+    compatibility; they are no longer what drives detection.
+    """
 
-    target: str  # Expected to be defined in the implementing class
+    NUMERIC_TYPES: List[str] = list(_NUMERIC_TYPES)
+    CATEGORICAL_TYPES: List[str] = list(_CATEGORICAL_TYPES)
+    DATETIME_TYPES: List[str] = list(_DATETIME_TYPES)
+
+    target: Optional[str]  # Expected to be defined in the implementing class
+
+    def _target_exclusion(self) -> List[str]:
+        target = getattr(self, "target", None)
+        return [target] if target else []
 
     def _get_numeric_columns(self, X: pd.DataFrame) -> List[str]:
         """
@@ -90,8 +111,7 @@ class ColumnTypeMixin:
         Returns:
             List of numeric column names.
         """
-        target = getattr(self, "target", None)
-        return [col for col in X.select_dtypes(include=self.NUMERIC_TYPES).columns if col != target]
+        return get_numeric_columns(X, exclude=self._target_exclusion())
 
     def _get_categorical_columns(self, X: pd.DataFrame) -> List[str]:
         """
@@ -100,19 +120,16 @@ class ColumnTypeMixin:
         Returns:
             List of categorical column names.
         """
-        target = getattr(self, "target", None)
-        return [
-            col for col in X.select_dtypes(include=self.CATEGORICAL_TYPES).columns if col != target
-        ]
+        return get_categorical_columns(X, exclude=self._target_exclusion())
 
     def _get_datetime_columns(self, X: pd.DataFrame) -> List[str]:
         """
-        Get list of datetime columns.
+        Get list of datetime columns (any resolution, tz-aware or naive).
 
         Returns:
             List of datetime column names.
         """
-        return X.select_dtypes(include=["datetime64[ns]"]).columns.tolist()
+        return get_datetime_columns(X)
 
     def _get_all_feature_columns(self, X: pd.DataFrame) -> List[str]:
         """
@@ -128,17 +145,7 @@ class ColumnTypeMixin:
 class DateEngineeringMixin:
     """Mixin for datetime feature engineering."""
 
-    DATE_COMPONENTS: List[str] = [
-        "day_of_month",
-        "day_of_week",
-        "is_wknd",
-        "month",
-        "day_of_year",
-        "year",
-        "hour",
-        "minute",
-        "second",
-    ]
+    DATE_COMPONENTS: List[str] = list(_DATE_COMPONENTS)
 
     def _engineer_datetime_features(self, X: pd.DataFrame, drop: bool = True) -> pd.DataFrame:
         """
@@ -147,34 +154,13 @@ class DateEngineeringMixin:
         Returns:
             DataFrame with engineered datetime features.
         """
-        X = X.copy()
-        datetime_cols = X.select_dtypes(include=["datetime64[ns]"]).columns.tolist()
-
-        for col in datetime_cols:
-            # Standardize datetime format
-            X[col] = pd.to_datetime(X[col])
-
-            # Extract components
-            X[f"{col}_day_of_month"] = X[col].dt.day
-            X[f"{col}_day_of_week"] = X[col].dt.dayofweek + 1
-            X[f"{col}_is_wknd"] = X[f"{col}_day_of_week"].isin([6, 7]).astype(int)
-            X[f"{col}_month"] = X[col].dt.month
-            X[f"{col}_day_of_year"] = X[col].dt.dayofyear
-            X[f"{col}_year"] = X[col].dt.year
-            X[f"{col}_hour"] = X[col].dt.hour
-            X[f"{col}_minute"] = X[col].dt.minute
-            X[f"{col}_second"] = X[col].dt.second
-
-            if drop:
-                X = X.drop(columns=[col])
-
-        return X
+        return engineer_datetime_features(X, drop_original=drop)
 
 
 class SchemaValidationMixin:
     """Mixin for input/output schema validation."""
 
-    _input_schema: dict = None
+    _input_schema: Optional[dict] = None
 
     def _store_input_schema(self, X: pd.DataFrame) -> None:
         """
@@ -216,26 +202,21 @@ class SchemaValidationMixin:
 class TargetTypeMixin:
     """Mixin for target variable type detection."""
 
-    NUMERIC_TYPES: List[str] = [
-        "int",
-        "int8",
-        "int16",
-        "int32",
-        "int64",
-        "float",
-        "float16",
-        "float32",
-        "float64",
-    ]
+    NUMERIC_TYPES: List[str] = list(_NUMERIC_TYPES)
 
-    target: str
-    pred_type: str = None
-    n_classes: int = None
-    eval_metric: str = None
+    target: Optional[str]
+    pred_type: Optional[str] = None
+    n_classes: Optional[int] = None
+    eval_metric: Optional[str] = None
 
-    def _detect_target_type(self, X: pd.DataFrame) -> tuple:
+    def _detect_target_type(self, X: pd.DataFrame) -> Tuple[str, str]:
         """
         Detect target variable type and set appropriate metric.
+
+        Delegates to the single ``is_numeric_target`` helper (see
+        ``utils.columns``) so nullable extension dtypes (``Int64``,
+        ``Float64``), narrow widths (``int8``/``int16``/``float16``) and
+        unsigned integers are all classified consistently across the package.
 
         Returns:
             Tuple of (prediction_type, evaluation_metric).
@@ -243,15 +224,13 @@ class TargetTypeMixin:
         if self.target not in X.columns:
             raise ValidationError(f"Target column '{self.target}' not found")
 
-        target_dtype = X[self.target].dtype
-
-        if target_dtype in self.NUMERIC_TYPES:
+        if is_numeric_target(X[self.target]):
             self.pred_type = "Reg"
             self.eval_metric = "Mean Absolute Error"
             self.n_classes = None
         else:
             self.pred_type = "Class"
-            self.n_classes = X[self.target].nunique()
+            self.n_classes = int(X[self.target].nunique())
             self.eval_metric = "F1" if self.n_classes > 2 else "Precision"
 
         return self.pred_type, self.eval_metric

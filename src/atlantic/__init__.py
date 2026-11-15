@@ -8,31 +8,31 @@ imputation methods.
 
 Example:
     >>> from atlantic import Atlantic
-    >>> 
-    >>> # Direct usage
+    >>>
+    >>> # Direct usage (relevance=1.0 skips the optional H2O feature selection;
+    >>> # relevance<1.0 needs `pip install "atlantic[h2o]"` and Java)
     >>> atl = Atlantic(X=data, target="target_column")
-    >>> atl.fit_processing(split_ratio=0.75, relevance=0.99)
+    >>> atl.fit_processing(split_ratio=0.75, relevance=1.0)
     >>> processed = atl.data_processing(X=new_data)
-    >>> 
+    >>>
     >>> # Builder pattern
     >>> pipeline = (Atlantic.builder()
-    ...     .with_feature_selection(method="h2o", relevance=0.95)
+    ...     .with_feature_selection(method="none")
     ...     .with_encoding(scaler="standard", encoder="ifrequency")
     ...     .with_imputation(method="knn", auto_select=True)
     ...     .with_vif_filtering(threshold=10.0)
     ...     .build())
-    >>> 
+    >>>
     >>> processed = pipeline.fit_transform(X=data, target="target")
 """
 
-__version__ = "2.0.0"
-__author__ = "Luís Fernando da Silva Santos"
+from atlantic._version import __version__
 
 # Core
 from atlantic.core.enums import (
     DimensionalityTier,
     EncoderType,
-    EncodingVersion,
+    EncodingVersionType,
     FeatureSelectorType,
     ImputerType,
     OptimizationLevel,
@@ -41,10 +41,15 @@ from atlantic.core.enums import (
 )
 from atlantic.core.exceptions import (
     AtlanticError,
+    ConfigurationError,
     EncodingError,
     FeatureSelectionError,
+    H2OConnectionError,
     ImputationError,
     NotFittedError,
+    RegistryError,
+    SchemaValidationError,
+    StateSerializationError,
     ValidationError,
 )
 
@@ -90,6 +95,8 @@ from atlantic.preprocessing.scalers import AutoMinMaxScaler, AutoRobustScaler, A
 # State
 from atlantic.state.pipeline_state import StateManager
 
+__author__ = "Luís Fernando da Silva Santos"
+
 __all__ = [
     # Version
     "__version__",
@@ -103,7 +110,7 @@ __all__ = [
     "TaskType",
     "DimensionalityTier",
     "OptimizationLevel",
-    "EncodingVersion",
+    "EncodingVersionType",
     "ScalerType",
     "EncoderType",
     "ImputerType",
@@ -113,8 +120,13 @@ __all__ = [
     "NotFittedError",
     "ValidationError",
     "FeatureSelectionError",
+    "H2OConnectionError",
     "EncodingError",
     "ImputationError",
+    "SchemaValidationError",
+    "StateSerializationError",
+    "RegistryError",
+    "ConfigurationError",
     # Schemas
     "PipelineConfig",
     "PipelineState",

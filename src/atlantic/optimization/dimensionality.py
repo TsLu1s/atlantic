@@ -1,3 +1,9 @@
+"""
+Atlantic - Dimensionality Strategy.
+
+Adapts the evaluation budget (trials, model complexity) to the dataset size.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,7 +14,13 @@ from atlantic.core.enums import DimensionalityTier, OptimizationLevel
 
 @dataclass
 class DimensionalityConfig:
-    """Configuration for optimization based on data dimensions."""
+    """Configuration for optimization based on data dimensions.
+
+    ``n_trials`` and ``model_complexity`` drive :class:`ModelEvaluator`.
+    ``n_folds`` and ``early_stopping_rounds`` are reserved for a future
+    cross-validated evaluation and are not consumed today (candidates are
+    scored on a single hold-out split).
+    """
 
     tier: DimensionalityTier
     optimization_level: OptimizationLevel
@@ -41,7 +53,7 @@ class DimensionalityStrategy:
         DimensionalityTier.XLARGE: (float("inf"), float("inf")),
     }
 
-    # Trial matrix: [tier][aggressiveness] -> n_trials
+    # Trial matrix: [tier][optimization level] -> n_trials
     TRIAL_MATRIX: Dict[DimensionalityTier, Dict[OptimizationLevel, int]] = {
         DimensionalityTier.SMALL: {
             OptimizationLevel.FAST: 5,
