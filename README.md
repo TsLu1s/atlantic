@@ -54,7 +54,57 @@ Major frameworks used to build this project:
   </a>
 </p>
 
-The Atlantic pipeline runs in six stages. **Validate & prepare** checks the input and infers the task from the target: a numeric target is a regression task scored by MAE, anything else a classification task scored by Precision (two classes) or F1 (more classes). It then drops rows without a target, turns boolean columns into 0/1 features, expands datetime columns into nine calendar features, and removes high-null, constant and identifier-like columns, recording every removal in `dropped_columns`. **Split & select features** creates a train/validation split (stratified for classification) and, when `relevance < 1.0`, keeps the features that carry the requested share of H2O AutoML variable importance. **Select by validation score** compares four scaler and encoder combinations, then three imputers (only when values are missing), and finally an iterative VIF filter that is kept only if it improves the validation score. Every candidate is fitted on the train split and scored on the validation split by tuned RandomForest, ExtraTrees and XGBoost models, with a trial budget that adapts to the data size and the `optimization_level`. **Fit final transformers** refits the chosen scaler, encoder and imputer on the training rows only, so validation rows never influence them. **Transform new data** (`data_processing`) replays the same steps on any future frame: it rejects frames that lack a fitted column with a clear error, and it handles unseen categories and missing values. Finally, the fitted pipeline can be inspected, saved and reloaded.
+The Atlantic pipeline runs in six stages:
+
+#### 1. Validate & prepare
+
+- **Task detection:** the task is inferred from the target column.
+
+  | Target type | Task | Evaluation metric |
+  |-------------|------|-------------------|
+  | Numeric | Regression | MAE |
+  | Other, with 2 classes | Binary classification | Precision |
+  | Other, with more than 2 classes | Multiclass classification | F1 |
+
+- **Data preparation:**
+  - Rows with no target value are dropped.
+  - Boolean columns become 0/1 features.
+  - Each datetime column is expanded into nine calendar features.
+- **Column removal:** high-null, constant and identifier-like columns are removed. Every removal is recorded in `dropped_columns`.
+
+#### 2. Split & select features
+
+- **Split:** the data is divided into a train and a validation split. Classification splits are stratified.
+- **Feature selection (optional):** when `relevance < 1.0`, only the features carrying the requested share of H2O AutoML variable importance are kept. This requires `atlantic[h2o]`.
+
+#### 3. Select by validation score
+
+Preprocessing steps are chosen one at a time:
+
+| Step | Candidates | Applied when |
+|------|------------|--------------|
+| Encoding | 4 combinations: Standard or MinMax scaler × IFrequency or Label encoder | Always |
+| Imputation | Simple (mean), KNN, Iterative | The data has missing values |
+| VIF filtering | Iterative removal of features above `vif_ratio` | It improves the validation score |
+
+- **Evaluation:** each candidate is fitted on the train split and scored on the validation split, using tuned RandomForest, ExtraTrees and XGBoost models.
+- **Trial budget:** the number of tuning trials adapts to the data size and to `optimization_level`.
+
+#### 4. Fit final transformers
+
+The chosen scaler, encoder and imputer are refitted on the training rows only, so validation rows never influence them.
+
+#### 5. Transform new data
+
+`data_processing` replays the same steps on any future frame:
+
+- Frames missing a fitted column are rejected with a clear error.
+- Unseen categories and missing values are handled.
+
+#### 6. Inspect & persist
+
+- **Inspect:** the pipeline's decisions are exposed as `enc_method`, `imp_method`, `cols` and `dropped_columns`.
+- **Persist:** the fitted pipeline can be saved with `save` and reloaded with `Atlantic.load`.
 
 ## Where to get it <a name = "ta"></a>
 
