@@ -54,7 +54,7 @@ Major frameworks used to build this project:
   </a>
 </p>
 
-### The Atlantic pipeline runs in six stages:
+### The Atlantic pipeline runs in 6 main stages:
 
 #### 1. Validate & prepare
 
