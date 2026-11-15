@@ -1,6 +1,14 @@
+"""
+Atlantic - Synthetic Dataset Generator.
+
+Every generator draws from its own ``numpy.random.RandomState`` seeded with
+``random_state``: results are reproducible and the caller's global NumPy
+random state is never modified.
+"""
+
 from __future__ import annotations
 
-from typing import List, Literal, Optional, Tuple
+from typing import Any, Literal, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -23,14 +31,22 @@ class DatasetGenerator:
 
     @staticmethod
     def _introduce_nulls(
-        df: pd.DataFrame, target_name: str, null_percentage: float
+        df: pd.DataFrame,
+        target_name: str,
+        null_percentage: float,
+        rng: Optional[Any] = None,
     ) -> pd.DataFrame:
         """
         Introduce null values into DataFrame.
 
+        Args:
+            rng: Random generator to draw from. Defaults to NumPy's global
+                generator for backwards compatibility.
+
         Returns:
             DataFrame with nulls introduced.
         """
+        rng = rng if rng is not None else np.random
         df = df.copy()
         n_samples = len(df)
 
@@ -40,10 +56,79 @@ class DatasetGenerator:
 
             n_nulls = int(n_samples * null_percentage)
             if n_nulls > 0:
-                null_indices = np.random.choice(df.index, size=n_nulls, replace=False)
+                null_indices = rng.choice(df.index, size=n_nulls, replace=False)
                 df.loc[null_indices, col] = np.nan
 
         return df
+
+    @staticmethod
+    def _add_categorical_features(
+        df: pd.DataFrame, n_categorical: int, cardinality: str, rng: Any
+    ) -> None:
+        """Append ``n_categorical`` random categorical columns in place."""
+        categories = DatasetGenerator.CATEGORY_POOLS.get(
+            cardinality, DatasetGenerator.CATEGORY_POOLS["low"]
+        )
+        for i in range(n_categorical):
+            df[f"cat_feature_{i}"] = rng.choice(categories, size=len(df))
+
+    @staticmethod
+    def _classification_frame(
+        n_samples: int,
+        n_features: int,
+        n_informative: int,
+        n_classes: int,
+        n_categorical: int,
+        categorical_cardinality: str,
+        random_state: int,
+        rng: Any,
+    ) -> Tuple[pd.DataFrame, str]:
+        """Classification frame without nulls, drawing categoricals from ``rng``."""
+        X, y = make_classification(
+            n_samples=n_samples,
+            n_features=n_features,
+            n_informative=n_informative,
+            n_classes=n_classes,
+            random_state=random_state,
+        )
+
+        feature_names = [f"feature_{i}" for i in range(n_features)]
+        df = pd.DataFrame(X, columns=feature_names)
+
+        DatasetGenerator._add_categorical_features(df, n_categorical, categorical_cardinality, rng)
+
+        target_name = "target"
+        df[target_name] = [f"class_{v}" for v in y]
+        return df, target_name
+
+    @staticmethod
+    def _regression_frame(
+        n_samples: int,
+        n_features: int,
+        n_informative: int,
+        noise: float,
+        n_categorical: int,
+        categorical_cardinality: str,
+        random_state: int,
+        rng: Any,
+    ) -> Tuple[pd.DataFrame, str]:
+        """Regression frame without nulls, drawing categoricals from ``rng``."""
+        X, y = make_regression(
+            n_samples=n_samples,
+            n_features=n_features,
+            n_informative=n_informative,
+            noise=noise * 100,
+            random_state=random_state,
+        )
+
+        feature_names = [f"feature_{i}" for i in range(n_features)]
+        df = pd.DataFrame(X, columns=feature_names)
+
+        DatasetGenerator._add_categorical_features(df, n_categorical, categorical_cardinality, rng)
+
+        target_name = "target"
+        df[target_name] = y
+        return df, target_name
 
     @staticmethod
     def generate_classification(
@@ -62,38 +147,22 @@ class DatasetGenerator:
         Returns:
             Tuple of (DataFrame, target_column_name).
         """
-        np.random.seed(random_state)
+        rng = np.random.RandomState(random_state)
 
-        # Generate base classification data
-        X, y = make_classification(
+        df, target_name = DatasetGenerator._classification_frame(
             n_samples=n_samples,
             n_features=n_features,
             n_informative=n_informative,
             n_classes=n_classes,
+            n_categorical=n_categorical,
+            categorical_cardinality=categorical_cardinality,
             random_state=random_state,
+            rng=rng,
         )
-
-        # Create DataFrame
-        feature_names = [f"feature_{i}" for i in range(n_features)]
-        df = pd.DataFrame(X, columns=feature_names)
-
-        # Add categorical features
-        categories = DatasetGenerator.CATEGORY_POOLS.get(
-            categorical_cardinality, DatasetGenerator.CATEGORY_POOLS["low"]
-        )
-        for i in range(n_categorical):
-            df[f"cat_feature_{i}"] = np.random.choice(categories, size=n_samples)
-
-        # Add target
-        target_name = "target"
-        if n_classes == 2:
-            df[target_name] = ["class_0" if v == 0 else "class_1" for v in y]
-        else:
-            df[target_name] = [f"class_{v}" for v in y]
 
         # Introduce nulls
         if null_percentage > 0:
-            df = DatasetGenerator._introduce_nulls(df, target_name, null_percentage)
+            df = DatasetGenerator._introduce_nulls(df, target_name, null_percentage, rng)
 
         return df, target_name
 
@@ -114,35 +183,22 @@ class DatasetGenerator:
         Returns:
             Tuple of (DataFrame, target_column_name).
         """
-        np.random.seed(random_state)
+        rng = np.random.RandomState(random_state)
 
-        # Generate base regression data
-        X, y = make_regression(
+        df, target_name = DatasetGenerator._regression_frame(
             n_samples=n_samples,
             n_features=n_features,
             n_informative=n_informative,
-            noise=noise * 100,
+            noise=noise,
+            n_categorical=n_categorical,
+            categorical_cardinality=categorical_cardinality,
             random_state=random_state,
+            rng=rng,
         )
-
-        # Create DataFrame
-        feature_names = [f"feature_{i}" for i in range(n_features)]
-        df = pd.DataFrame(X, columns=feature_names)
-
-        # Add categorical features
-        categories = DatasetGenerator.CATEGORY_POOLS.get(
-            categorical_cardinality, DatasetGenerator.CATEGORY_POOLS["low"]
-        )
-        for i in range(n_categorical):
-            df[f"cat_feature_{i}"] = np.random.choice(categories, size=n_samples)
-
-        # Add target
-        target_name = "target"
-        df[target_name] = y
 
         # Introduce nulls
         if null_percentage > 0:
-            df = DatasetGenerator._introduce_nulls(df, target_name, null_percentage)
+            df = DatasetGenerator._introduce_nulls(df, target_name, null_percentage, rng)
 
         return df, target_name
 
@@ -162,29 +218,33 @@ class DatasetGenerator:
         Returns:
             Tuple of (DataFrame, target_column_name).
         """
-        np.random.seed(random_state)
+        rng = np.random.RandomState(random_state)
 
         # Calculate informative features (must be <= n_numeric)
         n_informative = min(n_numeric // 2, n_numeric - 1)
 
         # Generate base dataset
         if task_type == "classification":
-            df, target_name = DatasetGenerator.generate_classification(
+            df, target_name = DatasetGenerator._classification_frame(
                 n_samples=n_samples,
                 n_features=n_numeric,
                 n_informative=n_informative,
+                n_classes=2,
                 n_categorical=n_categorical,
-                null_percentage=0,
+                categorical_cardinality="low",
                 random_state=random_state,
+                rng=rng,
             )
         else:
-            df, target_name = DatasetGenerator.generate_regression(
+            df, target_name = DatasetGenerator._regression_frame(
                 n_samples=n_samples,
                 n_features=n_numeric,
                 n_informative=n_informative,
+                noise=0.1,
                 n_categorical=n_categorical,
-                null_percentage=0,
+                categorical_cardinality="low",
                 random_state=random_state,
+                rng=rng,
             )
 
         # Add datetime columns
@@ -192,17 +252,17 @@ class DatasetGenerator:
         end = pd.Timestamp(date_range[1])
         date_range_seconds = int((end - start).total_seconds())
 
-        random_seconds = np.random.randint(0, date_range_seconds, size=n_samples)
+        random_seconds = rng.randint(0, date_range_seconds, size=n_samples)
         df["datetime_col"] = start + pd.to_timedelta(random_seconds, unit="s")
 
         # Add second datetime column with different pattern
         df["event_date"] = df["datetime_col"] + pd.to_timedelta(
-            np.random.randint(0, 30, size=n_samples), unit="D"
+            rng.randint(0, 30, size=n_samples), unit="D"
         )
 
         # Introduce nulls
         if null_percentage > 0:
-            df = DatasetGenerator._introduce_nulls(df, target_name, null_percentage)
+            df = DatasetGenerator._introduce_nulls(df, target_name, null_percentage, rng)
 
         return df, target_name
 
@@ -285,35 +345,39 @@ class DatasetGenerator:
         Returns:
             Tuple of (DataFrame, target_column_name).
         """
-        np.random.seed(random_state)
+        rng = np.random.RandomState(random_state)
 
         n_features = 10
         n_informative = 5
 
         # Generate base dataset
         if task_type == "classification":
-            df, target_name = DatasetGenerator.generate_classification(
+            df, target_name = DatasetGenerator._classification_frame(
                 n_samples=n_samples,
                 n_features=n_features,
                 n_informative=n_informative,
+                n_classes=2,
                 n_categorical=0,
-                null_percentage=0,
+                categorical_cardinality="low",
                 random_state=random_state,
+                rng=rng,
             )
         else:
-            df, target_name = DatasetGenerator.generate_regression(
+            df, target_name = DatasetGenerator._regression_frame(
                 n_samples=n_samples,
                 n_features=n_features,
                 n_informative=n_informative,
+                noise=0.1,
                 n_categorical=0,
-                null_percentage=0,
+                categorical_cardinality="low",
                 random_state=random_state,
+                rng=rng,
             )
 
         # Add high-cardinality categorical features
         for i in range(n_categorical):
-            cardinality = np.random.randint(cardinality_range[0], cardinality_range[1])
+            cardinality = rng.randint(cardinality_range[0], cardinality_range[1])
             categories = [f"hc_cat_{i}_{j}" for j in range(cardinality)]
-            df[f"high_card_feature_{i}"] = np.random.choice(categories, size=n_samples)
+            df[f"high_card_feature_{i}"] = rng.choice(categories, size=n_samples)
 
         return df, target_name

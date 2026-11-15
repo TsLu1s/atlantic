@@ -1,20 +1,27 @@
+"""
+Atlantic - Pattern Optimizer.
+
+Sequential, performance-driven selection of the preprocessing steps:
+encoding version, imputation method and VIF filtering.
+"""
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, Optional, Tuple
+import warnings
+from typing import List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
-from tqdm import tqdm
 
 from atlantic.core.enums import TaskType
+from atlantic.core.exceptions import ValidationError
 from atlantic.core.mixins import TargetTypeMixin
-from atlantic.core.schemas import EncodingSelectionResult, ImputationSelectionResult
 from atlantic.encoding.optimizer import EncodingOptimizer
 from atlantic.encoding.versions import EncodingVersion
 from atlantic.evaluation.metrics import MetricRegistry
 from atlantic.feature_selection.vif_selector import VIFFeatureSelector
 from atlantic.optimization.evaluation import ModelEvaluator
 from atlantic.preprocessing.imputers import AutoIterativeImputer, AutoKNNImputer, AutoSimpleImputer
-from atlantic.preprocessing.registry import ImputerRegistry
 
 
 class Pattern(TargetTypeMixin):
@@ -32,6 +39,8 @@ class Pattern(TargetTypeMixin):
         target: str,
         optimization_level: str = "balanced",
         verbosity: int = 1,
+        random_state: int = 42,
+        n_jobs: Optional[int] = None,
     ):
         """
         Initialize Pattern optimizer.
@@ -40,14 +49,20 @@ class Pattern(TargetTypeMixin):
             train: Training DataFrame.
             test: Testing DataFrame.
             target: Target column name.
-            optimization Optimization optimization level.
+            optimization_level: Optimization level ("fast", "balanced", "thorough").
             verbosity: Logging verbosity level.
+            random_state: Seed shared by every model evaluation and by the
+                iterative imputer, so all candidates are scored under
+                identical conditions.
+            n_jobs: Parallelism of the evaluation models (see ``ModelEvaluator``).
         """
         self.train = train
         self.test = test
         self.target = target
         self._optimization_level = optimization_level
         self._verbosity = verbosity
+        self._random_state = random_state
+        self._n_jobs = n_jobs
 
         # Detect target type
         self._detect_target_type(train)
@@ -57,16 +72,35 @@ class Pattern(TargetTypeMixin):
         self.imp_method: Optional[str] = None
         self._imputer = None
         self.perf: Optional[float] = None
+        self.vif_removed: List[str] = []
+        self.vif_applied: bool = False
 
         # Encoding optimizer
         self._encoding_optimizer = EncodingOptimizer(
-            target=target, optimization_level=optimization_level, verbosity=verbosity
+            target=target,
+            optimization_level=optimization_level,
+            verbosity=verbosity,
+            random_state=random_state,
+            n_jobs=n_jobs,
         )
 
     def _get_eval_metric(self) -> str:
         """Get evaluation metric based on task type."""
         task_type = TaskType.REGRESSION if self.pred_type == "Reg" else TaskType.CLASSIFICATION
         return MetricRegistry.get_primary_metric_name(task_type, self.n_classes)
+
+    def _evaluate(self, train: pd.DataFrame, test: pd.DataFrame, eval_metric: str) -> float:
+        """Score a prepared train/test pair on the primary metric."""
+        evaluator = ModelEvaluator(
+            train=train,
+            test=test,
+            target=self.target,
+            optimization_level=self._optimization_level,
+            random_state=self._random_state,
+            verbosity=0,
+            n_jobs=self._n_jobs,
+        )
+        return float(evaluator.auto_evaluate()[eval_metric].iloc[0])
 
     def encoding_selection(self) -> str:
         """
@@ -90,9 +124,18 @@ class Pattern(TargetTypeMixin):
 
         return self.enc_method
 
-    def imputation_selection(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def imputation_selection(
+        self, simple_score: Optional[float] = None
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Select optimal imputation method based on performance.
+
+        Args:
+            simple_score: Score already measured for mean imputation on this
+                exact encoding (the encoding selection scores every version
+                with mean imputation, under the same seed and optimization
+                level). When given, the "Simple" candidate reuses it instead
+                of repeating an evaluation whose result is already known.
 
         Returns:
             Tuple of (imputed_train, imputed_test).
@@ -116,9 +159,11 @@ class Pattern(TargetTypeMixin):
 
         # Test different imputation methods
         imputation_methods = {
-            "Simple": AutoSimpleImputer(strategy="mean"),
-            "KNN": AutoKNNImputer(n_neighbors=3),
-            "Iterative": AutoIterativeImputer(max_iter=10, random_state=42),
+            "Simple": AutoSimpleImputer(strategy="mean", target=self.target),
+            "KNN": AutoKNNImputer(n_neighbors=3, target=self.target),
+            "Iterative": AutoIterativeImputer(
+                max_iter=10, random_state=self._random_state, target=self.target
+            ),
         }
 
         performance_scores = {}
@@ -137,18 +182,10 @@ class Pattern(TargetTypeMixin):
             test_imp = imputer.transform(self.test.copy())
 
             # Evaluate
-            evaluator = ModelEvaluator(
-                train=train_imp,
-                test=test_imp,
-                target=self.target,
-                optimization_level=self._optimization_level,
-                verbosity=0,
-            )
-
-            metrics = evaluator.auto_evaluate()
-            score = metrics[eval_metric].iloc[0]
-
-            performance_scores[method_name] = score
+            if method_name == "Simple" and simple_score is not None:
+                performance_scores[method_name] = float(simple_score)
+            else:
+                performance_scores[method_name] = self._evaluate(train_imp, test_imp, eval_metric)
             imputed_data[method_name] = (train_imp, test_imp, imputer)
 
         # Select best method
@@ -166,7 +203,7 @@ class Pattern(TargetTypeMixin):
             print("\nPredictive Performance Null Imputation Versions:")
             for method, score in performance_scores.items():
                 print(f"  {method} Performance: {score:.4f}")
-            print(f"\n{best_method} Imputation selected with " f"{eval_metric} of: {self.perf:.4f}")
+            print(f"\n{best_method} Imputation selected with {eval_metric} of: {self.perf:.4f}")
 
         return self.train, self.test
 
@@ -176,10 +213,17 @@ class Pattern(TargetTypeMixin):
         """
         Evaluate and apply VIF-based feature selection.
 
+        VIF filtering is only kept when it improves the primary metric over
+        the unfiltered baseline. ``vif_removed`` lists the columns that were
+        dropped when it is applied (empty otherwise) and ``vif_applied``
+        records the decision.
+
         Returns:
             Tuple of (filtered_train, filtered_test).
         """
         eval_metric = self._get_eval_metric()
+        self.vif_removed = []
+        self.vif_applied = False
 
         train_vif = self.train.copy()
         test_vif = self.test.copy()
@@ -190,21 +234,26 @@ class Pattern(TargetTypeMixin):
         try:
             vif_selector.fit(train_vif)
             cols_vif = vif_selector.selected_features + [self.target]
-        except Exception:
+        except (ValidationError, np.linalg.LinAlgError) as e:
             # If VIF fails, keep all columns
+            warnings.warn(
+                f"VIF filtering skipped: {e}",
+                UserWarning,
+                stacklevel=2,
+            )
             cols_vif = list(train_vif.columns)
+
+        removed = [col for col in train_vif.columns if col not in set(cols_vif)]
 
         if self._verbosity >= 1:
             print(f"\nSelected VIF Columns: {len(cols_vif) - 1}")
-            print(f"Removed Columns by VIF: {train_vif.shape[1] - len(cols_vif)}")
+            print(f"Removed Columns by VIF: {len(removed)}")
 
         train_vif = train_vif[cols_vif]
         test_vif = test_vif[cols_vif]
 
-        apply_vif = False
-
         # If no columns removed, just update and return
-        if self.train.shape[1] - len(cols_vif) == 0:
+        if not removed:
             self.train = self.train[cols_vif]
             self.test = self.test[cols_vif]
             return self.train, self.test
@@ -214,40 +263,27 @@ class Pattern(TargetTypeMixin):
             self.perf = perf_
 
         if self.perf is None:
-            evaluator = ModelEvaluator(
-                train=self.train.copy(),
-                test=self.test.copy(),
-                target=self.target,
-                optimization_level=self._optimization_level,
-                verbosity=0,
-            )
-            self.perf = evaluator.auto_evaluate()[eval_metric].iloc[0]
+            self.perf = self._evaluate(self.train.copy(), self.test.copy(), eval_metric)
 
         # Evaluate VIF-filtered version
-        evaluator_vif = ModelEvaluator(
-            train=train_vif,
-            test=test_vif,
-            target=self.target,
-            optimization_level=self._optimization_level,
-            verbosity=0,
-        )
-        perf_vif = evaluator_vif.auto_evaluate()[eval_metric].iloc[0]
+        perf_vif = self._evaluate(train_vif, test_vif, eval_metric)
 
         if self._verbosity >= 1:
             print(f"Default Performance: {self.perf:.4f}")
             print(f"VIF Performance: {perf_vif:.4f}")
 
         # Decide whether to apply VIF
-        if self.pred_type == "Reg" and perf_vif < self.perf:
-            apply_vif = True
-        elif self.pred_type == "Class" and perf_vif > self.perf:
-            apply_vif = True
+        apply_vif = (self.pred_type == "Reg" and perf_vif < self.perf) or (
+            self.pred_type == "Class" and perf_vif > self.perf
+        )
 
         if apply_vif:
             if self._verbosity >= 1:
                 print("\nThe VIF filtering method was applied")
             self.train = train_vif
             self.test = test_vif
+            self.vif_removed = removed
+            self.vif_applied = True
         else:
             if self._verbosity >= 1:
                 print("\nThe VIF filtering method was not applied")

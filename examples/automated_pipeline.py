@@ -4,7 +4,13 @@ Atlantic - Usage Examples.
 Examples for regression, binary classification, and multi-class classification.
 
 Note: Set relevance=1.0 to skip H2O feature selection.
-      Set relevance<1.0 (e.g., 0.99) to enable H2O feature selection.
+      Set relevance<1.0 (e.g., 0.99) to enable H2O feature selection - this
+      needs the optional dependency and a Java runtime:
+      pip install "atlantic[h2o]"
+
+      The task type is inferred from the target: numeric -> regression,
+      anything else -> classification. Integer-coded class labels (0/1) must
+      be cast to str to be treated as classes.
 """
 
 from atlantic import Atlantic
@@ -109,7 +115,7 @@ atl.fit_processing(
 train = atl.data_processing(X=train)
 test = atl.data_processing(X=test)
 
-#atl.save('atlantic_regression.pkl')
+atl.save('atlantic_regression.pkl')
 
 # #############################################################################
 #                      LOADING SAVED FITTED PIPELINE

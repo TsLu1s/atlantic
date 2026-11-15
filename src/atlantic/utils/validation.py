@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any, List, Optional, Union
 
-import pandas as np
 import pandas as pd
 
 from atlantic.core.exceptions import ValidationError
+from atlantic.utils.columns import is_numeric_column
 
 
 def validate_dataframe(X: Any, name: str = "Input", require_non_empty: bool = True) -> None:
@@ -102,15 +102,14 @@ def validate_numeric_columns(X: pd.DataFrame, columns: List[str], name: str = "C
     """
     Validate that columns are numeric.
 
+    Uses the shared :func:`atlantic.utils.columns.is_numeric_column` predicate,
+    so every integer/float width, unsigned integers and nullable numeric
+    dtypes are accepted (booleans are not).
+
     Raises:
         ValidationError: If non-numeric columns found.
     """
-    numeric_types = ["int", "int32", "int64", "float", "float32", "float64"]
-
-    non_numeric = []
-    for col in columns:
-        if col in X.columns and X[col].dtype.name not in numeric_types:
-            non_numeric.append(col)
+    non_numeric = [col for col in columns if col in X.columns and not is_numeric_column(X[col])]
 
     if non_numeric:
         raise ValidationError(f"{name} must be numeric. Non-numeric columns: {non_numeric}")

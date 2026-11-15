@@ -1,12 +1,21 @@
+"""
+Atlantic - Optuna Adapter.
+
+Optuna implementation of the optimizer adapter interface.
+"""
+
 from __future__ import annotations
 
-import logging
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Self
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Optional
 
 import optuna
 from tqdm import tqdm
 
 from atlantic.optimization.base import BaseOptimizerAdapter
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 class OptunaAdapter(BaseOptimizerAdapter):
@@ -14,6 +23,11 @@ class OptunaAdapter(BaseOptimizerAdapter):
     Optuna-specific implementation of optimizer adapter.
 
     Wraps Optuna's optimization interface with unified API.
+
+    Optuna's log verbosity is process-global. The adapter only lowers/raises
+    it *while it is creating or running a study* and restores the previous
+    level afterwards, so using Atlantic never permanently silences (or
+    un-silences) Optuna logging in the caller's application.
     """
 
     def __init__(self, random_state: Optional[int] = None, verbosity: int = 0):
@@ -26,18 +40,24 @@ class OptunaAdapter(BaseOptimizerAdapter):
         """
         super().__init__(random_state)
         self._verbosity = verbosity
-        self._configure_logging()
 
-    def _configure_logging(self) -> None:
-        """Configure Optuna logging based on verbosity."""
-        if self._verbosity == 0:
-            optuna.logging.set_verbosity(optuna.logging.ERROR)
-            logging.getLogger("optuna").setLevel(logging.ERROR)
-            logging.getLogger("optuna").disabled = True
-        elif self._verbosity == 1:
-            optuna.logging.set_verbosity(optuna.logging.WARNING)
-        else:
-            optuna.logging.set_verbosity(optuna.logging.INFO)
+    def _optuna_level(self) -> int:
+        """Map the adapter verbosity to an Optuna logging level."""
+        if self._verbosity <= 0:
+            return optuna.logging.ERROR
+        if self._verbosity == 1:
+            return optuna.logging.WARNING
+        return optuna.logging.INFO
+
+    @contextmanager
+    def _logging_scope(self) -> Iterator[None]:
+        """Temporarily apply this adapter's Optuna verbosity, then restore it."""
+        previous = optuna.logging.get_verbosity()
+        optuna.logging.set_verbosity(self._optuna_level())
+        try:
+            yield
+        finally:
+            optuna.logging.set_verbosity(previous)
 
     def create_study(
         self, direction: str = "minimize", study_name: Optional[str] = None
@@ -50,9 +70,10 @@ class OptunaAdapter(BaseOptimizerAdapter):
         """
         sampler = optuna.samplers.TPESampler(seed=self._random_state)
 
-        self._study = optuna.create_study(
-            direction=direction, study_name=study_name, sampler=sampler
-        )
+        with self._logging_scope():
+            self._study = optuna.create_study(
+                direction=direction, study_name=study_name, sampler=sampler
+            )
 
         return self._study
 
@@ -72,8 +93,10 @@ class OptunaAdapter(BaseOptimizerAdapter):
         if self._study is None:
             self.create_study()
 
-        all_callbacks = callbacks or []
+        # Copy so we never mutate a caller-supplied callbacks list.
+        all_callbacks = list(callbacks) if callbacks else []
 
+        pbar = None
         if show_progress:
             pbar = tqdm(total=n_trials, desc="Optimizing", ncols=75)
 
@@ -83,14 +106,15 @@ class OptunaAdapter(BaseOptimizerAdapter):
             all_callbacks.append(progress_callback)
 
         try:
-            self._study.optimize(
-                objective,
-                n_trials=n_trials,
-                callbacks=all_callbacks if all_callbacks else None,
-                show_progress_bar=False,
-            )
+            with self._logging_scope():
+                self._study.optimize(
+                    objective,
+                    n_trials=n_trials,
+                    callbacks=all_callbacks if all_callbacks else None,
+                    show_progress_bar=False,
+                )
         finally:
-            if show_progress:
+            if pbar is not None:
                 pbar.close()
 
         # Store best results
@@ -117,9 +141,7 @@ class OptunaAdapter(BaseOptimizerAdapter):
         Returns:
             Suggested float value.
         """
-        if log:
-            return trial.suggest_loguniform(name, low, high)
-        return trial.suggest_float(name, low, high)
+        return trial.suggest_float(name, low, high, log=log)
 
     def suggest_categorical(self, trial: optuna.Trial, name: str, choices: List[Any]) -> Any:
         """

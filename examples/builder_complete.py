@@ -2,7 +2,12 @@
 Atlantic - Complete Builder Pattern Example.
 
 Demonstrates all builder configurations and customization options
-for different use cases and scenarios.
+for different use cases and scenarios, then fits one of them end to end.
+
+Note: configurations that use ``with_feature_selection(method="h2o")`` need the
+optional H2O dependency and a Java runtime (``pip install "atlantic[h2o]"``).
+They are only *built* here; the pipeline that is actually fitted at the end
+uses ``method="none"`` and runs on a plain ``pip install atlantic``.
 """
 
 from sklearn.model_selection import train_test_split
@@ -10,7 +15,7 @@ import warnings
 warnings.filterwarnings("ignore", category=Warning)
 
 from atlantic.data import DatasetGenerator
-from atlantic.pipeline import AtlanticBuilder
+from atlantic.pipeline import AtlanticBuilder, AtlanticPipeline
 
 print("=" * 70)
 print("COMPLETE BUILDER PATTERN EXAMPLE")
@@ -20,30 +25,15 @@ print("=" * 70)
 # DATA PREPARATION
 # =============================================================================
 
-# Generate various datasets for different scenarios
-data_cls, target_cls = DatasetGenerator.generate_classification(
-    n_samples=1000, n_features=15, n_classes=2, n_categorical=4, 
-    null_percentage=0.08, random_state=42
-)
-
-data_reg, target_reg = DatasetGenerator.generate_regression(
-    n_samples=1000, n_features=15, n_categorical=4,
-    null_percentage=0.08, random_state=42
-)
-
+# Dataset with numeric, categorical and datetime columns plus missing values.
 data_dt, target_dt = DatasetGenerator.generate_with_datetime(
-    n_samples=1000, n_numeric=10, n_categorical=3, 
+    n_samples=1000, n_numeric=10, n_categorical=3,
     task_type="regression", null_percentage=0.05, random_state=42
 )
 
-data_hn, target_hn = DatasetGenerator.generate_high_null(
-    n_samples=1000, null_percentage=0.25, task_type="classification", random_state=42
-)
-
-data_hc, target_hc = DatasetGenerator.generate_high_cardinality(
-    n_samples=1000, n_categorical=5, cardinality_range=(50, 150),
-    task_type="classification", random_state=42
-)
+train_dt, test_dt = train_test_split(data_dt, train_size=0.8, random_state=42)
+train_dt = train_dt.reset_index(drop=True)
+test_dt = test_dt.reset_index(drop=True)
 
 # =============================================================================
 # BUILDER CONFIGURATION 1: DEFAULT (BALANCED)
@@ -70,7 +60,7 @@ print(f"  Encoder: {default_config.encoding.encoder}")
 print(f"  Auto-Select Encoding: {default_config.encoding.auto_select}")
 print(f"  Imputer: {default_config.imputation.method}")
 print(f"  Auto-Select Imputation: {default_config.imputation.auto_select}")
-print(f"  optimization {default_config.optimizer.optimization_level}")
+print(f"  Optimization Level: {default_config.optimizer.optimization_level}")
 print(f"  Random State: {default_config.optimizer.random_state}")
 
 # =============================================================================
@@ -111,7 +101,7 @@ print("Fast Prototyping Configuration:")
 print(f"  Feature Selection: {fast_pipeline.config.feature_selection.h2o_max_models} models")
 print(f"  Encoding: {fast_pipeline.config.encoding.scaler} + {fast_pipeline.config.encoding.encoder}")
 print(f"  Imputation: {fast_pipeline.config.imputation.method}")
-print(f"  optimization {fast_pipeline.config.optimizer.optimization_level}")
+print(f"  Optimization Level: {fast_pipeline.config.optimizer.optimization_level}")
 
 # =============================================================================
 # BUILDER CONFIGURATION 3: THOROUGH OPTIMIZATION
@@ -414,7 +404,7 @@ print("Maximum Preprocessing Configuration:")
 print(f"  Null Removal: {maximum_pipeline.config.null_removal_threshold}")
 print(f"  H2O Models: {maximum_pipeline.config.feature_selection.h2o_max_models}")
 print(f"  VIF Threshold: {maximum_pipeline.config.feature_selection.vif_threshold}")
-print(f"  optimization {maximum_pipeline.config.optimizer.optimization_level}")
+print(f"  Optimization Level: {maximum_pipeline.config.optimizer.optimization_level}")
 
 # =============================================================================
 # SUMMARY TABLE
@@ -437,18 +427,21 @@ configs = [
     ("Maximum", maximum_pipeline.config),
 ]
 
-print(f"\n{'Config':<15} {'H2O Models':<12} {'Optimization Level':<15} {'VIF':<8} {'Scaler':<10} {'Imputer':<12}")
-print("-" * 80)
+print(f"\n{'Config':<15} {'H2O Models':<12} {'Optimization':<14} {'VIF':<8} {'Scaler':<10} {'Imputer':<12}")
+print("-" * 75)
 for name, cfg in configs:
     h2o_models = cfg.feature_selection.h2o_max_models if cfg.feature_selection.method == "h2o" else "N/A"
-    print(f"{name:<15} {str(h2o_models):<12} {cfg.feature_selection.vif_threshold:<8} {cfg.encoding.scaler:<10} {cfg.imputation.method:<12}")
+    print(
+        f"{name:<15} {str(h2o_models):<12} {cfg.optimizer.optimization_level:<14} "
+        f"{cfg.feature_selection.vif_threshold:<8} {cfg.encoding.scaler:<10} {cfg.imputation.method:<12}"
+    )
 
 print("\n" + "=" * 70)
 print("USE CASE RECOMMENDATIONS")
 print("=" * 70)
 print("""
 - Quick Prototyping:     Fast configuration
-- Production Pipeline:   Thorough configuration  
+- Production Pipeline:   Thorough configuration
 - High Missing Data:     High-Null configuration
 - Many Categories:       High-Cardinality configuration
 - No H2O Available:      No-H2O configuration
@@ -458,42 +451,33 @@ print("""
 - Best Results:          Maximum configuration
 """)
 
+# =============================================================================
+# FIT, TRANSFORM, SAVE AND RELOAD A BUILT PIPELINE
+# =============================================================================
 
+print("=" * 70)
+print("RUNNING THE NO-H2O CONFIGURATION END TO END")
+print("=" * 70)
 
+# fit_transform learns every preprocessing decision on the training data ...
+train_processed = no_h2o_pipeline.fit_transform(train_dt, target=target_dt)
+# ... and transform replays them on unseen data.
+test_processed = no_h2o_pipeline.transform(test_dt)
 
+print(f"\nTrain: {train_dt.shape} -> {train_processed.shape}")
+print(f"Test:  {test_dt.shape} -> {test_processed.shape}")
 
+# The fitted Atlantic instance exposes what was selected and why.
+fitted = no_h2o_pipeline.atlantic
+print(f"\nEncoding selected:   {fitted.enc_method}")
+print(f"Imputation selected: {fitted.imp_method}")
+print(f"Datetime columns expanded into features: {fitted.fitted_components.datetime_columns}")
+print(f"Columns removed, by reason: {fitted.dropped_columns}")
+print(f"Remaining missing values (train/test): "
+      f"{int(train_processed.isnull().sum().sum())}/{int(test_processed.isnull().sum().sum())}")
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# Persist the fitted pipeline and reload it (only load pickle files you trust).
+no_h2o_pipeline.save("atlantic_builder_pipeline.pkl")
+reloaded = AtlanticPipeline.load("atlantic_builder_pipeline.pkl")
+assert reloaded.transform(test_dt).equals(test_processed)
+print("\nPipeline saved to 'atlantic_builder_pipeline.pkl' and reloaded successfully.")

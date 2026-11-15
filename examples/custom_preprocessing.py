@@ -11,6 +11,11 @@ Demonstrates individual usage of all preprocessing components:
 
 import numpy as np
 from atlantic.data import DatasetGenerator
+from atlantic.utils.columns import (
+    get_categorical_columns,
+    get_datetime_columns,
+    get_numeric_columns,
+)
 from sklearn.model_selection import train_test_split
 import warnings
 warnings.filterwarnings("ignore", category=Warning)
@@ -40,9 +45,9 @@ test = test.reset_index(drop=True)
 print(f"\nDataset Shape: {data.shape}")
 print(f"Target: {target}")
 print("\nColumn Types:")
-print(f"  Numeric: {train.select_dtypes(include=['int', 'float']).columns.tolist()[:5]}...")
-print(f"  Categorical: {train.select_dtypes(include=['object', 'category']).columns.tolist()}")
-print(f"  Datetime: {train.select_dtypes(include=['datetime64']).columns.tolist()}")
+print(f"  Numeric: {get_numeric_columns(train, exclude=[target])[:5]}...")
+print(f"  Categorical: {get_categorical_columns(train, exclude=[target])}")
+print(f"  Datetime: {get_datetime_columns(train)}")
 
 # =============================================================================
 # 1. DATE ENGINEERING
@@ -95,7 +100,6 @@ from atlantic.preprocessing import (
     AutoIFrequencyEncoder,
     AutoOneHotEncoder
 )
-from atlantic.utils.columns import get_categorical_columns
 
 # Get categorical columns (excluding target)
 cat_cols = get_categorical_columns(train_full_dates, exclude=[target])
@@ -152,7 +156,6 @@ from atlantic.preprocessing import (
     AutoStandardScaler,
     AutoRobustScaler
 )
-from atlantic.utils.columns import get_numeric_columns
 
 # Get numeric columns
 num_cols = get_numeric_columns(train_label, exclude=[target])
@@ -273,12 +276,12 @@ try:
     print(f"Selected Features: {vif_selector.n_selected}")
     print(f"Features Removed: {vif_selector.n_removed}")
     print(f"Selected: {vif_selector.selected_features[:5]}...")
-    
+
     # Transform both train and test
     train_vif = vif_selector.transform(train_for_vif)
     test_vif = vif_selector.transform(test_for_vif)
     print(f"After VIF - Train: {train_vif.shape}, Test: {test_vif.shape}")
-    
+
     if vif_selector.vif_dataframe is not None:
         print("\nVIF Values (top 5):")
         print(vif_selector.vif_dataframe.head())
@@ -373,7 +376,7 @@ print("=" * 70)
 print("""
 Components Available:
 - Encoders: AutoLabelEncoder, AutoIFrequencyEncoder, AutoOneHotEncoder
-- Scalers: AutoStandardScaler, AutoMinMaxScaler, AutoRobustScaler  
+- Scalers: AutoStandardScaler, AutoMinMaxScaler, AutoRobustScaler
 - Imputers: AutoSimpleImputer, AutoKNNImputer, AutoIterativeImputer
 - Feature Selectors: H2OFeatureSelector, VIFFeatureSelector
 
@@ -383,32 +386,3 @@ Utilities:
 - Registries: EncoderRegistry, ScalerRegistry, ImputerRegistry
 - Encoding Versions: EncodingVersionFactory (V1-V4)
 """)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

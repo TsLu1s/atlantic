@@ -49,8 +49,14 @@ Major frameworks used to build this project:
 ## Framework Architecture <a name = "ta"></a>
 
 <p align="center">
-  <img src="https://i.ibb.co/C9dWJmk/ATL-Architecture-Final.png" align="center" width="700" height="680" />
-</p>    
+  <a href="https://raw.githubusercontent.com/TsLu1s/atlantic/main/docs/Atlantic_Pipeline_Diagram.png">
+    <img src="https://raw.githubusercontent.com/TsLu1s/atlantic/main/docs/Atlantic_Pipeline_Diagram.png" alt="Atlantic pipeline: validation and preparation, train/validation split with optional H2O feature selection, selection of encoding, imputation and VIF filtering by validation score, final fit on the training split, transformation of new data, and persistence" width="100%" />
+  </a>
+</p>
+
+<p align="center"><sub>Click the diagram to open it at full resolution. Source: <a href="https://github.com/TsLu1s/atlantic/blob/main/docs/Atlantic_Pipeline_Diagram.drawio"><code>docs/Atlantic_Pipeline_Diagram.drawio</code></a> (editable in <a href="https://app.diagrams.net">diagrams.net</a>).</sub></p>
+
+The Atlantic pipeline runs in six stages. **Validate & prepare** checks the input and infers the task from the target: a numeric target is a regression task scored by MAE, anything else a classification task scored by Precision (two classes) or F1 (more classes). It then drops rows without a target, turns boolean columns into 0/1 features, expands datetime columns into nine calendar features, and removes high-null, constant and identifier-like columns, recording every removal in `dropped_columns`. **Split & select features** creates a train/validation split (stratified for classification) and, when `relevance < 1.0`, keeps the features that carry the requested share of H2O AutoML variable importance. **Select by validation score** compares four scaler and encoder combinations, then three imputers (only when values are missing), and finally an iterative VIF filter that is kept only if it improves the validation score. Every candidate is fitted on the train split and scored on the validation split by tuned RandomForest, ExtraTrees and XGBoost models, with a trial budget that adapts to the data size and the `optimization_level`. **Fit final transformers** refits the chosen scaler, encoder and imputer on the training rows only, so validation rows never influence them. **Transform new data** (`data_processing`) replays the same steps on any future frame: it rejects frames that lack a fitted column with a clear error, and it handles unseen categories and missing values. Finally, the fitted pipeline can be inspected, saved and reloaded.
 
 ## Where to get it <a name = "ta"></a>
 
@@ -63,6 +69,12 @@ To install this package from Pypi repository run the following command:
 pip install atlantic
 ```
 
+Feature selection with H2O AutoML is an optional component that needs the `h2o` package and a Java runtime. Install it with:
+```
+pip install "atlantic[h2o]"
+```
+Without it the rest of the pipeline works unchanged: pass `relevance=1.0` (or `with_feature_selection(method="none")` in the builder) to skip H2O feature selection. Requires Python 3.11+.
+
 # Usage Examples
     
 ## 1. Atlantic - Automated Data Preprocessing Pipeline
@@ -71,14 +83,24 @@ Import the package, load a dataset, split it, and define your target column name
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `split_ratio` | Train/Validation split ratio for preprocessing evaluation | 0.75 |
-| `relevance` | Minimum feature importance percentage for H2O AutoML selection | 0.99 |
+| `split_ratio` | Train/Validation split ratio for preprocessing evaluation (0.5 - 0.98) | 0.75 |
+| `relevance` | Minimum feature importance percentage for H2O AutoML selection (0.4 - 1.0). `1.0` skips H2O feature selection; lower values require `atlantic[h2o]` | 0.99 |
 | `h2o_fs_models` | Number of models for H2O AutoML feature selection | 7 |
 | `encoding_fs` | Encode categorical features before H2O selection | True |
-| `vif_ratio` | Variance Inflation Factor threshold | 10.0 |
+| `vif_ratio` | Variance Inflation Factor threshold (3 - 30) | 10.0 |
 | `optimization_level` | Optimization intensity: `"fast"`, `"balanced"`, `"thorough"` | "balanced" |
 
+The `Atlantic` constructor additionally accepts:
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `random_state` | Seed for the internal train/validation split and every model evaluation | 42 |
+| `n_jobs` | Parallelism of the evaluation models. `None` keeps the tree ensembles single-threaded, `-1` uses all cores (same results, faster on mid-sized data) | None |
+| `verbosity` | `0` silent, `1` selection summary, `2` detailed | 1 |
+
 Once fitted, use `data_processing` to transform any future dataframes with the same structure.
+
+> **Task type.** It is inferred from the target column: a numeric target is a regression task, anything else (strings, categories, booleans) a classification task. Integer-coded class labels such as `0`/`1` are therefore treated as regression (a warning is raised) - cast them first: `data["Target_Column"] = data["Target_Column"].astype(str)`.
 
 ```py
 import pandas as pd
@@ -102,7 +124,7 @@ atl = Atlantic(X=train, target="Target_Column")
 
 atl.fit_processing(
     split_ratio=0.75,
-    relevance=0.99,
+    relevance=0.99,      # H2O feature selection (needs atlantic[h2o]); 1.0 skips it
     h2o_fs_models=7,
     vif_ratio=10.0,
     optimization_level="balanced"
@@ -113,10 +135,20 @@ train = atl.data_processing(X=train)
 test = atl.data_processing(X=test)
 future_data = atl.data_processing(X=future_data)
 
-### Export Preprocessing Metadata
-import dill as pickle
-with open('fit_atl.pkl', 'wb') as output:
-    pickle.dump(atl, output)
+### Inspect what the pipeline decided
+print(atl.enc_method, atl.imp_method)   # selected encoding version / imputation method
+print(atl.cols)                         # feature columns kept
+print(atl.dropped_columns)              # columns removed, grouped by reason
+
+### Export the fitted pipeline (built-in helper — uses pickle under the hood)
+### The training data is not stored in the file. Only load pipeline files you trust.
+atl.save('fit_atl.pkl')
+loaded_atl = Atlantic.load('fit_atl.pkl')
+
+# Or serialize manually with dill (bundled dependency):
+# import dill as pickle
+# with open('fit_atl.pkl', 'wb') as output:
+#     pickle.dump(atl, output)
 ```  
 
 ## 2. Atlantic - Builder Pattern (Granular Control)
@@ -157,7 +189,19 @@ pipeline = (AtlanticBuilder()
 ### Fit and Transform
 train_processed = pipeline.fit_transform(train, target="Target_Column")
 test_processed = pipeline.transform(test)
+
+### Inspect the fitted result and persist the pipeline
+print(pipeline.atlantic.enc_method, pipeline.atlantic.dropped_columns)
+pipeline.save('fit_pipeline.pkl')
+# from atlantic.pipeline import AtlanticPipeline
+# pipeline = AtlanticPipeline.load('fit_pipeline.pkl')
 ```
+
+Notes on the builder options:
+
+* `with_date_engineering(enabled, drop)` - `enabled=False` leaves datetime columns out of the features; `drop=False` keeps the original datetime columns in the transformed output next to the generated features.
+* `with_encoding(..., auto_select=True)` / `with_imputation(..., auto_select=True)` select the best option by validation performance and ignore the explicit `scaler` / `encoder` / `method`; with `auto_select=False` they are applied as given.
+* `with_optimization(optimization_level, random_state, split_ratio, n_jobs, verbosity)` controls the evaluation budget, reproducibility and console output.
 
 ### Builder Configuration Presets
 
@@ -201,7 +245,7 @@ high_null_pipeline = (AtlanticBuilder()
     
 ### 3.1 Encoding Methods
  
-Encode categorical variables into numerical format. Choose from label encoding (ordinal mapping), one-hot encoding (binary columns), or inverse frequency encoding (IDF-based weights).
+Encode categorical variables into numerical format. Choose from label encoding (ordinal mapping) or inverse frequency encoding (IDF-based weights) — both preserve the column layout, so you can assign the result back in place. `AutoOneHotEncoder` **expands** each categorical column into several binary columns, so it returns a wider frame and must be handled separately (see the note below).
 
 ```py
 import pandas as pd
@@ -212,13 +256,15 @@ train, test = train_test_split(data, train_size=0.8)
 train = train.reset_index(drop=True)
 test = test.reset_index(drop=True)
 
-target = "Target_Column"
-cat_cols = [col for col in data.select_dtypes(include=['object']).columns if col != target]
+from atlantic.utils import get_categorical_columns, get_numeric_columns
 
-### Create Encoder (choose one)
+target = "Target_Column"
+# Detects object, category and string dtype columns on any pandas version.
+cat_cols = get_categorical_columns(data, exclude=[target])
+
+### Create Encoder (label or inverse-frequency — same-shape output)
 encoder = AutoLabelEncoder()
 # encoder = AutoIFrequencyEncoder()
-# encoder = AutoOneHotEncoder()
 
 ### Fit and Transform
 encoder.fit(train[cat_cols])
@@ -227,6 +273,12 @@ test[cat_cols] = encoder.transform(test[cat_cols])
 
 ### Inverse Transform (if needed)
 train[cat_cols] = encoder.inverse_transform(train[cat_cols])
+
+### One-hot encoding returns a WIDER frame — do not assign back into cat_cols:
+# ohe = AutoOneHotEncoder()
+# ohe.fit(train[cat_cols])
+# train = ohe.transform(train)   # original cat_cols are replaced by binary columns
+# test = ohe.transform(test)
 ```    
 
 ### 3.2 Scalers
@@ -235,8 +287,11 @@ Normalize numerical features to improve model convergence. Standard scaler for n
 
 ```py
 from atlantic.preprocessing import AutoStandardScaler, AutoMinMaxScaler, AutoRobustScaler
+from atlantic.utils import get_numeric_columns
 
-num_cols = train.select_dtypes(include=['int', 'float']).columns.tolist()
+target = "Target_Column"
+# Exclude the target: scaling the label column would distort it for regression.
+num_cols = get_numeric_columns(train, exclude=[target])
 
 ### Create Scaler (choose one)
 scaler = AutoStandardScaler()  # Zero mean, unit variance
@@ -271,11 +326,12 @@ test = imputer.transform(test)
 
 Reduce dimensionality by removing redundant or low-importance features. VIF removes multicollinear features, while H2O AutoML identifies the most predictive ones.
 
+> **Note:** `VIFFeatureSelector` evaluates numeric, null-free columns — impute nulls first (it raises `ValidationError` on nulls). Non-numeric columns are passed through untouched. `vif_threshold` must be within `[3.0, 30.0]`. The `H2OFeatureSelector` example below requires a running H2O cluster (Java); install the optional dependency with `pip install atlantic[h2o]`.
 
 ```py
 from atlantic.feature_selection import VIFFeatureSelector, H2OFeatureSelector
 
-### VIF-based Selection
+### VIF-based Selection (expects encoded, imputed, numeric features)
 vif_selector = VIFFeatureSelector(target=target, vif_threshold=10.0)
 vif_selector.fit(train)
 train = vif_selector.transform(train)
@@ -292,6 +348,9 @@ Check out the <a href="https://github.com/TsLu1s/atlantic/blob/main/examples/cus
     <img src="https://img.shields.io/badge/Custom%20Preprocessing-blue?style=for-the-badge&logo=readme&logoColor=white" alt="Custom Preprocessing">
 </a> for detailed implementations of all preprocessing methods.
 
+For interactive and step by step guideline walkthrough, feel free to explore the <a href="https://github.com/TsLu1s/atlantic/blob/main/examples/notebooks" style="text-decoration:none;">
+    <img src="https://img.shields.io/badge/Jupyter%20Notebooks-orange?style=for-the-badge&logo=jupyter&logoColor=white" alt="Jupyter Notebooks">
+</a>
 
 ## Citation
 ```bibtex

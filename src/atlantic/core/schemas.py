@@ -1,15 +1,26 @@
+"""
+Atlantic - Configuration and State Schemas.
+
+Pydantic models validate user-facing configuration; plain dataclasses carry
+fitted state and selection results.
+"""
+
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional
 
 import pandas as pd
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class PipelineConfig(BaseModel):
-    """Configuration for Atlantic pipeline."""
+    """Configuration for Atlantic pipeline.
+
+    Ranges are enforced by the field constraints; ``Atlantic.fit_processing``
+    re-raises a violation as :class:`atlantic.ValidationError`.
+    """
 
     split_ratio: float = Field(default=0.75, ge=0.5, le=0.98)
     relevance: float = Field(default=0.99, ge=0.4, le=1.0)
@@ -18,20 +29,6 @@ class PipelineConfig(BaseModel):
     vif_threshold: float = Field(default=10.0, ge=3.0, le=30.0)
     optimization_level: Literal["fast", "balanced", "thorough"] = Field(default="balanced")
     random_state: int = Field(default=42)
-
-    @field_validator("split_ratio")
-    @classmethod
-    def validate_split_ratio(cls, v: float) -> float:
-        if not 0.5 <= v <= 0.98:
-            raise ValueError("split_ratio must be between 0.5 and 0.98")
-        return v
-
-    @field_validator("relevance")
-    @classmethod
-    def validate_relevance(cls, v: float) -> float:
-        if not 0.4 <= v <= 1.0:
-            raise ValueError("relevance must be between 0.4 and 1.0")
-        return v
 
 
 class FeatureSelectionConfig(BaseModel):
@@ -64,15 +61,23 @@ class ImputationConfig(BaseModel):
     iterative_max_iter: int = Field(default=10, ge=1, le=100)
     iterative_random_state: Optional[int] = Field(default=42)
     auto_select: bool = Field(default=True)
+    params: Dict[str, Any] = Field(default_factory=dict)
 
 
 class OptimizerConfig(BaseModel):
-    """Configuration for hyperparameter optimization."""
+    """Configuration for hyperparameter optimization.
+
+    ``n_folds`` is reserved: the internal evaluation currently scores each
+    candidate on a single hold-out split (``split_ratio``), not with
+    cross-validation.
+    """
 
     optimization_level: Literal["fast", "balanced", "thorough"] = Field(default="balanced")
     random_state: int = Field(default=42)
+    split_ratio: float = Field(default=0.75, ge=0.5, le=0.98)
     n_folds: int = Field(default=3, ge=2, le=10)
-    verbosity: int = Field(default=0, ge=0, le=2)
+    verbosity: int = Field(default=1, ge=0, le=2)
+    n_jobs: Optional[int] = Field(default=None)
 
 
 class BuilderConfig(BaseModel):
@@ -99,6 +104,8 @@ class FittedComponents:
     categorical_columns: List[str] = field(default_factory=list)
     encoding_version: Optional[str] = None
     imputation_method: Optional[str] = None
+    datetime_columns: List[str] = field(default_factory=list)
+    dropped_columns: Dict[str, List[str]] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -108,6 +115,8 @@ class FittedComponents:
             "categorical_columns": self.categorical_columns,
             "encoding_version": self.encoding_version,
             "imputation_method": self.imputation_method,
+            "datetime_columns": self.datetime_columns,
+            "dropped_columns": self.dropped_columns,
         }
 
 
@@ -130,7 +139,9 @@ class PipelineState:
             "config": self.config.model_dump() if self.config else None,
             "fitted_components": self.fitted_components.to_dict(),
             "feature_importance": (
-                self.feature_importance.to_dict() if self.feature_importance is not None else None
+                self.feature_importance.to_dict(orient="list")
+                if self.feature_importance is not None
+                else None
             ),
             "task_type": self.task_type,
             "n_classes": self.n_classes,
@@ -150,6 +161,8 @@ class PipelineState:
             categorical_columns=data["fitted_components"].get("categorical_columns", []),
             encoding_version=data["fitted_components"].get("encoding_version"),
             imputation_method=data["fitted_components"].get("imputation_method"),
+            datetime_columns=data["fitted_components"].get("datetime_columns", []),
+            dropped_columns=data["fitted_components"].get("dropped_columns", {}),
         )
 
         feature_importance = (

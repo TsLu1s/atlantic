@@ -1,3 +1,9 @@
+"""
+Atlantic - Component Registries.
+
+Name -> class registries for encoders, scalers and imputers.
+"""
+
 from __future__ import annotations
 
 from typing import Any, Dict, Generic, List, Type, TypeVar
@@ -80,13 +86,21 @@ class ComponentRegistry(Generic[T]):
 
 
 # Import components for registration
-from atlantic.preprocessing.encoders import (
+from atlantic.preprocessing.encoders import (  # noqa: E402
     AutoIFrequencyEncoder,
     AutoLabelEncoder,
     AutoOneHotEncoder,
 )
-from atlantic.preprocessing.imputers import AutoIterativeImputer, AutoKNNImputer, AutoSimpleImputer
-from atlantic.preprocessing.scalers import AutoMinMaxScaler, AutoRobustScaler, AutoStandardScaler
+from atlantic.preprocessing.imputers import (  # noqa: E402
+    AutoIterativeImputer,
+    AutoKNNImputer,
+    AutoSimpleImputer,
+)
+from atlantic.preprocessing.scalers import (  # noqa: E402
+    AutoMinMaxScaler,
+    AutoRobustScaler,
+    AutoStandardScaler,
+)
 
 # Create registry instances
 EncoderRegistry = ComponentRegistry[Any]("Encoder")

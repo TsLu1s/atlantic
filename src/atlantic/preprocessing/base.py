@@ -1,12 +1,17 @@
+"""
+Atlantic - Preprocessing Base Classes.
+
+Abstract contracts for encoders, scalers, imputers and feature selectors.
+"""
+
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import TYPE_CHECKING, List, Optional
 
 import pandas as pd
 
 from atlantic.core.base import BasePreprocessor
-from atlantic.core.exceptions import NotFittedError
 
 if TYPE_CHECKING:
     from typing import Self

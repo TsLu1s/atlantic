@@ -1,3 +1,7 @@
+"""
+Atlantic - Enumerations.
+"""
+
 from enum import Enum
 
 
@@ -18,15 +22,19 @@ class DimensionalityTier(Enum):
 
 
 class OptimizationLevel(Enum):
-    """Optimization optimization level."""
+    """Optimization intensity level."""
 
     FAST = "fast"  # Minimal trials, quick results
     BALANCED = "balanced"  # Default, good trade-off
     THOROUGH = "thorough"  # Maximum trials, best results
 
 
-class EncodingVersion(Enum):
-    """Encoding version combinations."""
+class EncodingVersionType(Enum):
+    """Encoding version combinations.
+
+    Renamed from ``EncodingVersion`` to avoid colliding with the helper
+    class ``atlantic.encoding.versions.EncodingVersion``.
+    """
 
     V1 = "v1"  # StandardScaler + IFrequencyEncoder
     V2 = "v2"  # MinMaxScaler + IFrequencyEncoder
