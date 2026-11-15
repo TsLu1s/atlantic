@@ -117,12 +117,6 @@ To install this package from Pypi repository run the following command:
 pip install atlantic
 ```
 
-Feature selection with H2O AutoML is an optional component that needs the `h2o` package and a Java runtime. Install it with:
-```
-pip install "atlantic[h2o]"
-```
-Without it the rest of the pipeline works unchanged: pass `relevance=1.0` (or `with_feature_selection(method="none")` in the builder) to skip H2O feature selection. Requires Python 3.11+.
-
 # Usage Examples
     
 ## 1. Atlantic - Automated Data Preprocessing Pipeline
