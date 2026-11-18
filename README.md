@@ -3,7 +3,6 @@
 <h1>Atlantic - Automated Data Preprocessing for Supervised Machine Learning</h1>
 
 [![PyPI][pypi-shield]][pypi-url]
-[![Python][python-shield]][pypi-url]
 [![MIT License][license-shield]][license-url]
 [![Contributors][contributors-shield]][contributors-url]
 [![Stargazers][stars-shield]][stars-url]
