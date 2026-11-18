@@ -1,4 +1,4 @@
-"""Stand-in for the optional ``h2o`` package, used by tests that exercise the
+"""Stand-in for the ``h2o`` package, used by tests that exercise the
 H2O feature-selection code path without a JVM."""
 
 from __future__ import annotations

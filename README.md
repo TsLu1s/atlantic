@@ -1,52 +1,49 @@
-[![LinkedIn][linkedin-shield]][linkedin-url]
+<div align="center">
+
+<h1>Atlantic</h1>
+
+<p><strong>Automated data preprocessing for supervised machine learning</strong></p>
+
+<p>Feature engineering, feature selection, encoding and imputation, each chosen for your data by validation score.</p>
+
+[![PyPI][pypi-shield]][pypi-url]
+[![Python][python-shield]][pypi-url]
+[![Downloads][downloads-shield]][downloads-url]
+[![Month Downloads][downloads-month-shield]][downloads-url]
+[![MIT License][license-shield]][license-url]
+<br>
 [![Contributors][contributors-shield]][contributors-url]
 [![Stargazers][stars-shield]][stars-url]
-[![MIT License][license-shield]][license-url]
-[![Downloads][downloads-shield]][downloads-url]
-[![Month Downloads][downloads-month-shield]][downloads-month-url]
+[![LinkedIn][linkedin-shield]][linkedin-url]
 
-[contributors-shield]: https://img.shields.io/github/contributors/TsLu1s/Atlantic.svg?style=for-the-badge&logo=github&logoColor=white
-[contributors-url]: https://github.com/TsLu1s/Atlantic/graphs/contributors
-[stars-shield]: https://img.shields.io/github/stars/TsLu1s/Atlantic.svg?style=for-the-badge&logo=github&logoColor=white
-[stars-url]: https://github.com/TsLu1s/Atlantic/stargazers
-[license-shield]: https://img.shields.io/github/license/TsLu1s/Atlantic.svg?style=for-the-badge&logo=opensource&logoColor=white
-[license-url]: https://github.com/TsLu1s/Atlantic/blob/main/LICENSE
-[linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
-[linkedin-url]: https://www.linkedin.com/in/luisfssantos98/
-[downloads-shield]: https://static.pepy.tech/personalized-badge/atlantic?period=total&units=international_system&left_color=grey&right_color=blue&left_text=Total%20Downloads
-[downloads-url]: https://pepy.tech/project/atlantic
-[downloads-month-shield]: https://static.pepy.tech/personalized-badge/atlantic?period=month&units=international_system&left_color=grey&right_color=blue&left_text=Month%20Downloads
-[downloads-month-url]: https://pepy.tech/project/atlantic
+<p>
+  <a href="#overview">Overview</a> &nbsp;·&nbsp;
+  <a href="#how-it-works">How it works</a> &nbsp;·&nbsp;
+  <a href="#installation">Installation</a> &nbsp;·&nbsp;
+  <a href="#quick-start">Quick start</a> &nbsp;·&nbsp;
+  <a href="#usage-guide">Usage guide</a> &nbsp;·&nbsp;
+  <a href="#examples-and-notebooks">Examples</a> &nbsp;·&nbsp;
+  <a href="#citation">Citation</a>
+</p>
 
-<br>
-<p align="center">
-  <h2 align="center"> Atlantic - Automated Data Preprocessing Framework for Supervised Machine Learning
-  <br>
-  
-## Framework Contextualization <a name = "ta"></a>
+</div>
 
-The `Atlantic` project constitutes a comprehensive and objective approach to simplify and automate data processing through the integration and validated application of various preprocessing mechanisms, ranging from feature engineering, automated feature selection, multiple encoding versions and null imputation methods. The optimization methodology of this framework follows an evaluation structured in tree-based model ensembles.
+---
 
-This project aims at providing the following application capabilities:
+## Overview
 
-* General applicability on tabular datasets: The developed preprocessing procedures are applicable on multiple domains associated with Supervised Machine Learning, regardless of the properties or specifications of the data.
+The Atlantic project constitutes a comprehensive and objective approach to simplify and automate data processing through the integration and validated application of various preprocessing mechanisms, ranging from feature engineering, automated feature selection, multiple encoding versions and null imputation methods. The optimization methodology of this framework follows an evaluation structured in tree-based model ensembles.
 
-* Automated treatment of tabular data associated with predictive analysis: It implements a global and carefully validated data processing based on the characteristics of the data input columns.
+- **Works on any tabular dataset.** Regression, binary and multiclass classification, across domains, with numeric, categorical, boolean and datetime columns.
+- **Decisions backed by evidence.** Encoding, imputation and multicollinearity filtering are selected by validation score, not by rule of thumb.
+- **Automated feature selection.** H2O AutoML variable importance keeps the features that carry the share of signal you ask for.
+- **Leak-free by design.** Final transformers are fitted on training rows only, so validation rows never influence them.
+- **Built for reuse.** A fitted pipeline replays the exact same steps on new data and can be saved and reloaded.
+- **Transparent.** Every decision, including every dropped column and the reason it was dropped, is exposed for inspection.
 
-* Robustness and improvement of predictive results: The implementation of the `atlantic` automated data preprocessing pipeline aims at improving predictive performance directly associated with the processing methods implemented based on the data properties.  
-   
-#### Main Development Tools <a name = "pre1"></a>
+---
 
-Major frameworks used to build this project: 
-   
-* [H2O.ai](https://docs.h2o.ai/h2o/latest-stable/h2o-docs/automl.html)
-* [Scikit-learn](https://scikit-learn.org/stable/)
-* [XGBoost](https://xgboost.readthedocs.io/en/stable/)
-* [Optuna](https://optuna.org/)
-* [Pandas](https://pandas.pydata.org/)
-
-    
-## Framework Architecture <a name = "ta"></a>
+## How it works
 
 <p align="center">
   <a href="https://raw.githubusercontent.com/TsLu1s/atlantic/main/docs/Atlantic_Pipeline_Diagram.png">
@@ -54,32 +51,43 @@ Major frameworks used to build this project:
   </a>
 </p>
 
-### The Atlantic pipeline runs in 6 main stages:
+The pipeline runs in six stages:
 
-#### 1. Validate & prepare
+| # | Stage | What happens |
+|:-:|-------|--------------|
+| 1 | **Validate & prepare** | Infers the task, drops rows without a target, encodes booleans as 0/1, expands datetimes and removes unusable columns |
+| 2 | **Split & select features** | Splits into train and validation (stratified for classification) and, when `relevance < 1.0`, keeps the most important features found by H2O AutoML |
+| 3 | **Select by validation score** | Chooses the encoding, imputation and VIF filtering steps one at a time, keeping each only if it scores best |
+| 4 | **Fit final transformers** | Refits the chosen scaler, encoder and imputer on the training rows only |
+| 5 | **Transform new data** | `data_processing` replays the same steps on any future frame |
+| 6 | **Inspect & persist** | Exposes every decision and saves the fitted pipeline for reuse |
 
-- **Task detection:** the task is inferred from the target column.
+<details>
+<summary><strong>Stage-by-stage details</strong></summary>
 
-  | Target type | Task | Evaluation metric |
-  |-------------|------|-------------------|
-  | Numeric | Regression | MAE |
-  | Other, with 2 classes | Binary classification | Precision |
-  | Other, with more than 2 classes | Multiclass classification | F1 |
+<br>
 
-- **Data preparation:**
-  - Rows with no target value are dropped.
-  - Boolean columns become 0/1 features.
-  - Each datetime column is expanded into nine calendar features.
-- **Column removal:** high-null, constant and identifier-like columns are removed. Every removal is recorded in `dropped_columns`.
+**1. Validate & prepare**
 
-#### 2. Split & select features
+The task is inferred from the target column:
 
-- **Split:** the data is divided into a train and a validation split. Classification splits are stratified.
-- **Feature selection (optional):** when `relevance < 1.0`, only the features carrying the requested share of H2O AutoML variable importance are kept. This requires `atlantic[h2o]`.
+| Target type | Task | Evaluation metric |
+|-------------|------|-------------------|
+| Numeric | Regression | MAE |
+| Other, with 2 classes | Binary classification | Precision |
+| Other, with more than 2 classes | Multiclass classification | F1 |
 
-#### 3. Select by validation score
+- Rows with no target value are dropped.
+- Boolean columns become 0/1 features.
+- Each datetime column is expanded into nine calendar features.
+- High-null, constant and identifier-like columns are removed. Every removal is recorded in `dropped_columns`.
 
-Preprocessing steps are chosen one at a time:
+**2. Split & select features**
+
+- The data is divided into a train and a validation split. Classification splits are stratified.
+- When `relevance < 1.0`, only the features carrying the requested share of H2O AutoML variable importance are kept.
+
+**3. Select by validation score**
 
 | Step | Candidates | Applied when |
 |------|------------|--------------|
@@ -87,116 +95,141 @@ Preprocessing steps are chosen one at a time:
 | Imputation | Simple (mean), KNN, Iterative | The data has missing values |
 | VIF filtering | Iterative removal of features above `vif_ratio` | It improves the validation score |
 
-- **Evaluation:** each candidate is fitted on the train split and scored on the validation split, using tuned RandomForest, ExtraTrees and XGBoost models.
-- **Trial budget:** the number of tuning trials adapts to the data size and to `optimization_level`.
+- Each candidate is fitted on the train split and scored on the validation split, using tuned RandomForest, ExtraTrees and XGBoost models.
+- The number of tuning trials adapts to the data size and to `optimization_level`.
 
-#### 4. Fit final transformers
+**4. Fit final transformers**
 
 The chosen scaler, encoder and imputer are refitted on the training rows only, so validation rows never influence them.
 
-#### 5. Transform new data
-
-`data_processing` replays the same steps on any future frame:
+**5. Transform new data**
 
 - Frames missing a fitted column are rejected with a clear error.
 - Unseen categories and missing values are handled.
 
-#### 6. Inspect & persist
+**6. Inspect & persist**
 
-- **Inspect:** the pipeline's decisions are exposed as `enc_method`, `imp_method`, `cols` and `dropped_columns`.
-- **Persist:** the fitted pipeline can be saved with `save` and reloaded with `Atlantic.load`.
+- The pipeline's decisions are exposed as `enc_method`, `imp_method`, `cols` and `dropped_columns`.
+- The fitted pipeline can be saved with `save` and reloaded with `Atlantic.load`.
 
-## Where to get it <a name = "ta"></a>
+</details>
 
-Binary installer for the latest released version is available at the Python Package Index [(PyPI)](https://pypi.org/project/atlantic/).  
+---
 
-## Installation  
+## Installation
 
-To install this package from Pypi repository run the following command:
-```
+Atlantic is published on [PyPI](https://pypi.org/project/atlantic/). One command installs the full framework, H2O AutoML included:
+
+```bash
 pip install atlantic
 ```
 
-# Usage Examples
-    
-## 1. Atlantic - Automated Data Preprocessing Pipeline
+| Requirement | Notes |
+|-------------|-------|
+| **Python** | 3.11 or newer |
+| **Java runtime** | H2O AutoML runs on the JVM, so feature selection (`relevance < 1.0`, the default) needs Java installed. Check with `java -version`. |
 
-Import the package, load a dataset, split it, and define your target column name. Customize the `fit_processing` method with the following parameters:
+> **No Java available?** Pass `relevance=1.0` to `fit_processing` (or `with_feature_selection(method="none")` in the builder). Everything else in Atlantic runs without it.
+
+---
+
+## Quick start
+
+```python
+from sklearn.model_selection import train_test_split
+from atlantic import Atlantic
+from atlantic.data import DatasetGenerator
+
+# Any pandas DataFrame with a target column works; here we generate one.
+data, target = DatasetGenerator.generate_classification(
+    n_samples=2000, n_features=15, n_classes=2, n_categorical=4, null_percentage=0.05
+)
+train, test = train_test_split(data, train_size=0.8, random_state=42)
+
+atl = Atlantic(X=train, target=target)
+atl.fit_processing()                      # H2O feature selection + balanced search
+
+train_ready = atl.data_processing(X=train)
+test_ready = atl.data_processing(X=test)
+
+print(atl.enc_method, atl.imp_method)     # what Atlantic decided
+```
+
+---
+
+## Usage guide
+
+### 1. Automated pipeline
+
+The `Atlantic` class runs the full pipeline. Fit it once on training data, then use `data_processing` to transform any future frame with the same structure.
+
+**`fit_processing` parameters**
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `split_ratio` | Train/Validation split ratio for preprocessing evaluation (0.5 - 0.98) | 0.75 |
-| `relevance` | Minimum feature importance percentage for H2O AutoML selection (0.4 - 1.0). `1.0` skips H2O feature selection; lower values require `atlantic[h2o]` | 0.99 |
-| `h2o_fs_models` | Number of models for H2O AutoML feature selection | 7 |
-| `encoding_fs` | Encode categorical features before H2O selection | True |
-| `vif_ratio` | Variance Inflation Factor threshold (3 - 30) | 10.0 |
-| `optimization_level` | Optimization intensity: `"fast"`, `"balanced"`, `"thorough"` | "balanced" |
+| `split_ratio` | Train/validation split ratio used to evaluate preprocessing candidates (0.5 – 0.98) | `0.75` |
+| `relevance` | Share of H2O AutoML feature importance to keep (0.4 – 1.0). `1.0` skips H2O feature selection | `0.99` |
+| `h2o_fs_models` | Number of models trained by H2O AutoML for feature selection | `7` |
+| `encoding_fs` | Encode categorical features before H2O selection | `True` |
+| `vif_ratio` | Variance Inflation Factor threshold (3 – 30) | `10.0` |
+| `optimization_level` | Search intensity: `"fast"`, `"balanced"` or `"thorough"` | `"balanced"` |
 
-The `Atlantic` constructor additionally accepts:
+**`Atlantic` constructor parameters**
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `random_state` | Seed for the internal train/validation split and every model evaluation | 42 |
-| `n_jobs` | Parallelism of the evaluation models. `None` keeps the tree ensembles single-threaded, `-1` uses all cores (same results, faster on mid-sized data) | None |
-| `verbosity` | `0` silent, `1` selection summary, `2` detailed | 1 |
+| `random_state` | Seed for the internal train/validation split and every model evaluation | `42` |
+| `n_jobs` | Parallelism of the evaluation models. `None` keeps the tree ensembles single-threaded; `-1` uses all cores (same results, faster on mid-sized data) | `None` |
+| `verbosity` | `0` silent, `1` selection summary, `2` detailed | `1` |
 
-Once fitted, use `data_processing` to transform any future dataframes with the same structure.
+> **Task type.** A numeric target is treated as regression; anything else (strings, categories, booleans) as classification. Integer-coded class labels such as `0`/`1` are therefore treated as regression and a warning is raised. Cast them first: `data["Target_Column"] = data["Target_Column"].astype(str)`.
 
-> **Task type.** It is inferred from the target column: a numeric target is a regression task, anything else (strings, categories, booleans) a classification task. Integer-coded class labels such as `0`/`1` are therefore treated as regression (a warning is raised) - cast them first: `data["Target_Column"] = data["Target_Column"].astype(str)`.
-
-```py
+```python
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from atlantic.pipeline import Atlantic
-import warnings
-warnings.filterwarnings("ignore", category=Warning)
-    
-data = pd.read_csv('csv_directory_path', encoding='latin', delimiter=',')
+
+data = pd.read_csv("csv_directory_path", encoding="latin", delimiter=",")
 
 train, test = train_test_split(data, train_size=0.8)
 test, future_data = train_test_split(test, train_size=0.6)
 
 train = train.reset_index(drop=True)
 test = test.reset_index(drop=True)
-future_data = future_data.reset_index(drop=True)
-future_data.drop(columns=["Target_Column"], inplace=True)
+future_data = future_data.reset_index(drop=True).drop(columns=["Target_Column"])
 
-### Fit Data Processing
-atl = Atlantic(X=train, target="Target_Column")    
-
+# Fit
+atl = Atlantic(X=train, target="Target_Column")
 atl.fit_processing(
     split_ratio=0.75,
-    relevance=0.99,      # H2O feature selection (needs atlantic[h2o]); 1.0 skips it
+    relevance=0.99,              # H2O AutoML feature selection; 1.0 skips it
     h2o_fs_models=7,
     vif_ratio=10.0,
-    optimization_level="balanced"
+    optimization_level="balanced",
 )
 
-### Transform Data Processing
+# Transform
 train = atl.data_processing(X=train)
 test = atl.data_processing(X=test)
 future_data = atl.data_processing(X=future_data)
 
-### Inspect what the pipeline decided
+# Inspect what the pipeline decided
 print(atl.enc_method, atl.imp_method)   # selected encoding version / imputation method
 print(atl.cols)                         # feature columns kept
 print(atl.dropped_columns)              # columns removed, grouped by reason
 
-### Export the fitted pipeline (built-in helper — uses pickle under the hood)
-### The training data is not stored in the file. Only load pipeline files you trust.
-atl.save('fit_atl.pkl')
-loaded_atl = Atlantic.load('fit_atl.pkl')
+# Persist (pickle-based; the training data is not stored in the file)
+atl.save("fit_atl.pkl")
+loaded_atl = Atlantic.load("fit_atl.pkl")
+```
 
-# Or serialize manually with dill (bundled dependency):
-# import dill as pickle
-# with open('fit_atl.pkl', 'wb') as output:
-#     pickle.dump(atl, output)
-```  
+> **Security note.** Pipeline files are pickles. Only load files you trust.
 
-## 2. Atlantic - Builder Pattern (Granular Control)
+### 2. Builder pattern
 
-For fine-grained control over preprocessing steps, use the `AtlanticBuilder` fluent interface:
-```py
+For fine-grained control over each step, compose a pipeline with the fluent `AtlanticBuilder` interface:
+
+```python
 from sklearn.model_selection import train_test_split
 from atlantic.pipeline import AtlanticBuilder
 
@@ -204,59 +237,48 @@ train, test = train_test_split(data, train_size=0.8)
 train = train.reset_index(drop=True)
 test = test.reset_index(drop=True)
 
-### Build Custom Pipeline
-pipeline = (AtlanticBuilder()
+pipeline = (
+    AtlanticBuilder()
     .with_date_engineering(enabled=True, drop=True)
     .with_null_removal(threshold=0.90)
-    .with_feature_selection(
-        method="h2o",
-        relevance=0.95,
-        h2o_models=10,
-        encoding_fs=True
-    )
-    .with_encoding(
-        scaler="standard",
-        encoder="ifrequency",
-        auto_select=True
-    )
-    .with_imputation(
-        method="knn",
-        auto_select=True
-    )
+    .with_feature_selection(method="h2o", relevance=0.95, h2o_models=10, encoding_fs=True)
+    .with_encoding(scaler="standard", encoder="ifrequency", auto_select=True)
+    .with_imputation(method="knn", auto_select=True)
     .with_vif_filtering(threshold=10.0)
     .with_optimization(optimization_level="balanced")
     .build()
 )
 
-### Fit and Transform
 train_processed = pipeline.fit_transform(train, target="Target_Column")
 test_processed = pipeline.transform(test)
 
-### Inspect the fitted result and persist the pipeline
 print(pipeline.atlantic.enc_method, pipeline.atlantic.dropped_columns)
-pipeline.save('fit_pipeline.pkl')
+pipeline.save("fit_pipeline.pkl")
 # from atlantic.pipeline import AtlanticPipeline
-# pipeline = AtlanticPipeline.load('fit_pipeline.pkl')
+# pipeline = AtlanticPipeline.load("fit_pipeline.pkl")
 ```
 
-Notes on the builder options:
+| Builder method | Behaviour |
+|----------------|-----------|
+| `with_date_engineering(enabled, drop)` | `enabled=False` leaves datetime columns out of the features; `drop=False` keeps the original datetime columns in the output next to the generated features |
+| `with_encoding(..., auto_select=True)` | Selects the best scaler and encoder by validation score and ignores the explicit `scaler` / `encoder`. With `auto_select=False` they are applied as given |
+| `with_imputation(..., auto_select=True)` | Selects the best imputer by validation score and ignores the explicit `method`. With `auto_select=False` it is applied as given |
+| `with_optimization(optimization_level, random_state, split_ratio, n_jobs, verbosity)` | Controls the evaluation budget, reproducibility and console output |
 
-* `with_date_engineering(enabled, drop)` - `enabled=False` leaves datetime columns out of the features; `drop=False` keeps the original datetime columns in the transformed output next to the generated features.
-* `with_encoding(..., auto_select=True)` / `with_imputation(..., auto_select=True)` select the best option by validation performance and ignore the explicit `scaler` / `encoder` / `method`; with `auto_select=False` they are applied as given.
-* `with_optimization(optimization_level, random_state, split_ratio, n_jobs, verbosity)` controls the evaluation budget, reproducibility and console output.
+#### Configuration presets
 
-### Builder Configuration Presets
+| Preset | Use case | Key settings |
+|--------|----------|--------------|
+| **Fast** | Quick prototyping | `h2o_models=3`, `method="simple"`, `optimization_level="fast"` |
+| **Balanced** | General purpose | Default settings |
+| **Thorough** | Best results | `h2o_models=15`, `method="iterative"`, `optimization_level="thorough"` |
+| **High-null** | More than 20% missing data | `threshold=0.80`, `scaler="robust"`, `method="iterative"` |
+| **No-H2O** | No Java runtime available | `method="none"`, VIF filtering only |
 
-| Configuration | Use Case | Key Settings |
-|--------------|----------|--------------|
-| Fast | Quick prototyping | `h2o_models=3`, `method="simple"`, `optimization_level="fast"` |
-| Balanced | General purpose | Default settings |
-| Thorough | Best results | `h2o_models=15`, `method="iterative"`, `optimization_level="thorough"` |
-| High-Null | Missing data >20% | `threshold=0.80`, `scaler="robust"`, `method="iterative"` |
-| No-H2O | Skip H2O selection | `method="none"`, VIF filtering only |
-```py
-# Fast Prototyping
-fast_pipeline = (AtlanticBuilder()
+```python
+# Fast prototyping
+fast_pipeline = (
+    AtlanticBuilder()
     .with_feature_selection(method="h2o", relevance=0.85, h2o_models=3)
     .with_encoding(scaler="minmax", encoder="label", auto_select=False)
     .with_imputation(method="simple", auto_select=False)
@@ -264,8 +286,9 @@ fast_pipeline = (AtlanticBuilder()
     .build()
 )
 
-# Thorough Optimization  
-thorough_pipeline = (AtlanticBuilder()
+# Thorough optimization
+thorough_pipeline = (
+    AtlanticBuilder()
     .with_feature_selection(method="h2o", relevance=0.98, h2o_models=15)
     .with_encoding(auto_select=True)
     .with_imputation(method="iterative", auto_select=True)
@@ -274,8 +297,9 @@ thorough_pipeline = (AtlanticBuilder()
     .build()
 )
 
-# High-Null Data
-high_null_pipeline = (AtlanticBuilder()
+# High-null data
+high_null_pipeline = (
+    AtlanticBuilder()
     .with_null_removal(threshold=0.80)
     .with_encoding(scaler="robust")
     .with_imputation(method="iterative", auto_select=True)
@@ -283,135 +307,164 @@ high_null_pipeline = (AtlanticBuilder()
 )
 ```
 
-## 3. Atlantic - Preprocessing Components
-    
-### 3.1 Encoding Methods
- 
-Encode categorical variables into numerical format. Choose from label encoding (ordinal mapping) or inverse frequency encoding (IDF-based weights) — both preserve the column layout, so you can assign the result back in place. `AutoOneHotEncoder` **expands** each categorical column into several binary columns, so it returns a wider frame and must be handled separately (see the note below).
+### 3. Preprocessing components
 
-```py
-import pandas as pd
-from sklearn.model_selection import train_test_split 
+Every building block of the pipeline is also available on its own, with a scikit-learn style `fit` / `transform` interface.
+
+| Component | Classes |
+|-----------|---------|
+| [Encoders](#31-encoders) | `AutoLabelEncoder`, `AutoIFrequencyEncoder`, `AutoOneHotEncoder` |
+| [Scalers](#32-scalers) | `AutoStandardScaler`, `AutoMinMaxScaler`, `AutoRobustScaler` |
+| [Imputers](#33-imputers) | `AutoSimpleImputer`, `AutoKNNImputer`, `AutoIterativeImputer` |
+| [Feature selectors](#34-feature-selectors) | `VIFFeatureSelector`, `H2OFeatureSelector` |
+
+#### 3.1 Encoders
+
+Label encoding (ordinal mapping) and inverse-frequency encoding (IDF-based weights) both preserve the column layout, so the result can be assigned back in place. `AutoOneHotEncoder` expands each categorical column into several binary columns and returns a wider frame.
+
+```python
+from sklearn.model_selection import train_test_split
 from atlantic.preprocessing import AutoLabelEncoder, AutoIFrequencyEncoder, AutoOneHotEncoder
+from atlantic.utils import get_categorical_columns
 
 train, test = train_test_split(data, train_size=0.8)
 train = train.reset_index(drop=True)
 test = test.reset_index(drop=True)
 
-from atlantic.utils import get_categorical_columns, get_numeric_columns
-
 target = "Target_Column"
-# Detects object, category and string dtype columns on any pandas version.
-cat_cols = get_categorical_columns(data, exclude=[target])
+cat_cols = get_categorical_columns(data, exclude=[target])  # object, category and string dtypes
 
-### Create Encoder (label or inverse-frequency — same-shape output)
+# Same-shape output: label or inverse-frequency
 encoder = AutoLabelEncoder()
 # encoder = AutoIFrequencyEncoder()
 
-### Fit and Transform
 encoder.fit(train[cat_cols])
 train[cat_cols] = encoder.transform(train[cat_cols])
 test[cat_cols] = encoder.transform(test[cat_cols])
 
-### Inverse Transform (if needed)
-train[cat_cols] = encoder.inverse_transform(train[cat_cols])
+train[cat_cols] = encoder.inverse_transform(train[cat_cols])  # if needed
 
-### One-hot encoding returns a WIDER frame — do not assign back into cat_cols:
+# One-hot returns a WIDER frame: do not assign it back into cat_cols
 # ohe = AutoOneHotEncoder()
 # ohe.fit(train[cat_cols])
 # train = ohe.transform(train)   # original cat_cols are replaced by binary columns
 # test = ohe.transform(test)
-```    
+```
 
-### 3.2 Scalers
+#### 3.2 Scalers
 
-Normalize numerical features to improve model convergence. Standard scaler for normal distributions, MinMax for bounded ranges, or Robust scaler for data with outliers.
+Standard scaling for roughly normal distributions, MinMax for bounded ranges, and Robust scaling for data with outliers.
 
-```py
+```python
 from atlantic.preprocessing import AutoStandardScaler, AutoMinMaxScaler, AutoRobustScaler
 from atlantic.utils import get_numeric_columns
 
 target = "Target_Column"
-# Exclude the target: scaling the label column would distort it for regression.
-num_cols = get_numeric_columns(train, exclude=[target])
+num_cols = get_numeric_columns(train, exclude=[target])  # never scale the target
 
-### Create Scaler (choose one)
-scaler = AutoStandardScaler()  # Zero mean, unit variance
-# scaler = AutoMinMaxScaler()  # Scale to [0, 1]
-# scaler = AutoRobustScaler()  # Median/IQR based, outlier-resistant
+scaler = AutoStandardScaler()    # zero mean, unit variance
+# scaler = AutoMinMaxScaler()    # scale to [0, 1]
+# scaler = AutoRobustScaler()    # median/IQR based, outlier-resistant
 
-### Fit and Transform
 scaler.fit(train[num_cols])
 train[num_cols] = scaler.transform(train[num_cols])
 test[num_cols] = scaler.transform(test[num_cols])
 ```
 
-### 3.3 Imputers
+#### 3.3 Imputers
 
-Handle missing values using statistical methods. Simple imputation for speed, KNN for local patterns, or iterative modeling for complex dependencies.
+Simple imputation for speed, KNN for local patterns, or iterative modelling for complex dependencies between features.
 
-```py
+```python
 from atlantic.preprocessing import AutoSimpleImputer, AutoKNNImputer, AutoIterativeImputer
 
-### Create Imputer (choose one)
-imputer = AutoSimpleImputer(strategy='mean', target=target)
+imputer = AutoSimpleImputer(strategy="mean", target=target)
 # imputer = AutoKNNImputer(n_neighbors=5, target=target)
 # imputer = AutoIterativeImputer(max_iter=10, target=target)
 
-### Fit and Transform
 imputer.fit(train)
 train = imputer.transform(train)
 test = imputer.transform(test)
 ```
 
-### 3.4 Feature Selection
+#### 3.4 Feature selectors
 
-Reduce dimensionality by removing redundant or low-importance features. VIF removes multicollinear features, while H2O AutoML identifies the most predictive ones.
+VIF filtering removes multicollinear features; H2O AutoML keeps the most predictive ones.
 
-> **Note:** `VIFFeatureSelector` evaluates numeric, null-free columns — impute nulls first (it raises `ValidationError` on nulls). Non-numeric columns are passed through untouched. `vif_threshold` must be within `[3.0, 30.0]`. The `H2OFeatureSelector` example below requires a running H2O cluster (Java); install the optional dependency with `pip install atlantic[h2o]`.
-
-```py
+```python
 from atlantic.feature_selection import VIFFeatureSelector, H2OFeatureSelector
 
-### VIF-based Selection (expects encoded, imputed, numeric features)
+# VIF: expects encoded, imputed, numeric features
 vif_selector = VIFFeatureSelector(target=target, vif_threshold=10.0)
 vif_selector.fit(train)
 train = vif_selector.transform(train)
 test = vif_selector.transform(test)
 
-### H2O AutoML Selection
+# H2O AutoML: starts a local H2O cluster (needs Java)
 h2o_selector = H2OFeatureSelector(target=target, relevance=0.95, max_models=7)
 h2o_selector.fit(train)
 train = h2o_selector.transform(train)
 test = h2o_selector.transform(test)
 ```
 
-Check out the <a href="https://github.com/TsLu1s/atlantic/blob/main/examples/custom_preprocessing.py" style="text-decoration:none;">
-    <img src="https://img.shields.io/badge/Custom%20Preprocessing-blue?style=for-the-badge&logo=readme&logoColor=white" alt="Custom Preprocessing">
-</a> for detailed implementations of all preprocessing methods.
+> **Note.** `VIFFeatureSelector` evaluates numeric, null-free columns, so impute nulls first (it raises `ValidationError` on nulls). Non-numeric columns are passed through untouched, and `vif_threshold` must be within `[3.0, 30.0]`.
 
-For interactive and step by step guideline walkthrough, feel free to explore the <a href="https://github.com/TsLu1s/atlantic/blob/main/examples/notebooks" style="text-decoration:none;">
-    <img src="https://img.shields.io/badge/Jupyter%20Notebooks-orange?style=for-the-badge&logo=jupyter&logoColor=white" alt="Jupyter Notebooks">
-</a>
+---
+
+## Examples and notebooks
+
+| Resource | What it covers |
+|----------|----------------|
+| [`automated_pipeline.py`](https://github.com/TsLu1s/atlantic/blob/main/examples/automated_pipeline.py) | The automated pipeline on regression, binary and multiclass tasks |
+| [`builder_complete.py`](https://github.com/TsLu1s/atlantic/blob/main/examples/builder_complete.py) | Every builder configuration, plus an end-to-end fit |
+| [`custom_preprocessing.py`](https://github.com/TsLu1s/atlantic/blob/main/examples/custom_preprocessing.py) | Each preprocessing component used on its own |
+| [Jupyter notebooks](https://github.com/TsLu1s/atlantic/tree/main/examples/notebooks) | Interactive, step-by-step walkthroughs of all of the above |
+
+---
+
+## Built with
+
+[H2O.ai AutoML](https://docs.h2o.ai/h2o/latest-stable/h2o-docs/automl.html) · [scikit-learn](https://scikit-learn.org/stable/) · [XGBoost](https://xgboost.readthedocs.io/en/stable/) · [Optuna](https://optuna.org/) · [pandas](https://pandas.pydata.org/)
+
+---
 
 ## Citation
+
+If Atlantic supports your work, please cite the accompanying paper:
+
 ```bibtex
 @article{SANTOS2023100532,
-  author = {Luis Fernando Santos and Luis Ferreira},
-  title = {Atlantic - Automated data preprocessing framework for supervised machine learning},
+  author  = {Luis Fernando Santos and Luis Ferreira},
+  title   = {Atlantic - Automated data preprocessing framework for supervised machine learning},
   journal = {Software Impacts},
-  volume = {17},
-  year = {2023},
-  issn = {2665-9638},
-  doi = {http://dx.doi.org/10.1016/j.simpa.2023.100532},
-  url = {https://www.sciencedirect.com/science/article/pii/S2665963823000696}
+  volume  = {17},
+  year    = {2023},
+  issn    = {2665-9638},
+  doi     = {http://dx.doi.org/10.1016/j.simpa.2023.100532},
+  url     = {https://www.sciencedirect.com/science/article/pii/S2665963823000696}
 }
 ```
-    
+
 ## License
 
-Distributed under the MIT License. See [LICENSE](https://github.com/TsLu1s/Atlantic/blob/main/LICENSE) for more information.
+Distributed under the MIT License. See [LICENSE](https://github.com/TsLu1s/atlantic/blob/main/LICENSE) for details.
 
-## Contact 
- 
-[Luis Santos - LinkedIn](https://www.linkedin.com/in/lu%C3%ADsfssantos/)
+## Contact
+
+**Luís Santos** · [LinkedIn](https://www.linkedin.com/in/lu%C3%ADsfssantos/)
+
+<!-- Badge references -->
+[pypi-shield]: https://img.shields.io/pypi/v/atlantic.svg?style=for-the-badge&logo=pypi&logoColor=white
+[pypi-url]: https://pypi.org/project/atlantic/
+[python-shield]: https://img.shields.io/pypi/pyversions/atlantic.svg?style=for-the-badge&logo=python&logoColor=white
+[downloads-shield]: https://img.shields.io/pepy/dt/atlantic?style=for-the-badge&label=downloads
+[downloads-month-shield]: https://img.shields.io/pypi/dm/atlantic.svg?style=for-the-badge
+[downloads-url]: https://pepy.tech/project/atlantic
+[license-shield]: https://img.shields.io/github/license/TsLu1s/Atlantic.svg?style=for-the-badge&logo=opensource&logoColor=white
+[license-url]: https://github.com/TsLu1s/Atlantic/blob/main/LICENSE
+[contributors-shield]: https://img.shields.io/github/contributors/TsLu1s/Atlantic.svg?style=for-the-badge&logo=github&logoColor=white
+[contributors-url]: https://github.com/TsLu1s/Atlantic/graphs/contributors
+[stars-shield]: https://img.shields.io/github/stars/TsLu1s/Atlantic.svg?style=for-the-badge&logo=github&logoColor=white
+[stars-url]: https://github.com/TsLu1s/Atlantic/stargazers
+[linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
+[linkedin-url]: https://www.linkedin.com/in/luisfssantos98/

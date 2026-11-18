@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "atlantic"
-version = "2.0.31"
+version = "2.0.32"
 description = "Atlantic is an automated preprocessing framework for supervised machine learning"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -45,11 +45,10 @@ dependencies = [
     "pydantic>=2.0.0,<3.0.0",
     "tqdm>=4.60.0",
     "dill>=0.3.6",
+    "h2o>=3.44.0.1",
 ]
 
 [project.optional-dependencies]
-# Optional H2O AutoML feature selection (requires a JVM)
-h2o = ["h2o>=3.44.0.1"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",

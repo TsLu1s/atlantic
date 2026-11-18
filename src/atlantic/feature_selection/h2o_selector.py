@@ -4,8 +4,9 @@ Atlantic - H2O AutoML Feature Selection.
 Trains H2O AutoML models, reads the leader's variable importance and keeps
 the features that account for a requested share of it.
 
-H2O is an *optional* dependency (``pip install "atlantic[h2o]"``) and needs a
-Java runtime; it is imported lazily, only when a selector is fitted.
+H2O ships with Atlantic, but its cluster needs a Java runtime. The package is
+imported lazily, only when a selector is fitted, so the rest of Atlantic stays
+usable (and fast to import) on machines without Java.
 """
 
 from __future__ import annotations
@@ -35,15 +36,15 @@ if TYPE_CHECKING:
     from h2o.automl import H2OAutoML
 
 H2O_INSTALL_HINT: str = (
-    "H2O feature selection needs the optional 'h2o' package and a Java runtime. "
-    'Install it with `pip install "atlantic[h2o]"`, or skip H2O feature selection by '
-    "passing relevance=1.0 to fit_processing() "
+    "H2O feature selection needs the 'h2o' package, which is installed with Atlantic, "
+    "and a Java runtime. Reinstall it with `pip install --force-reinstall atlantic`, "
+    "or skip H2O feature selection by passing relevance=1.0 to fit_processing() "
     '(builder: with_feature_selection(method="none")).'
 )
 
 
 def is_h2o_available() -> bool:
-    """Whether the optional ``h2o`` package can be imported."""
+    """Whether the ``h2o`` package can be imported."""
     if "h2o" in sys.modules:
         # A ``None`` entry means the import has been explicitly blocked.
         return sys.modules["h2o"] is not None

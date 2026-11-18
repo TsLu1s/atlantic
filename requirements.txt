@@ -7,7 +7,5 @@ optuna>=3.0.0,<5.0.0
 pydantic>=2.0.0,<3.0.0
 tqdm>=4.60.0
 dill>=0.3.6
-
-# Optional - only needed for H2O AutoML feature selection (relevance < 1.0).
-# Requires a Java runtime. Equivalent to: pip install "atlantic[h2o]"
-# h2o>=3.44.0.1
+# H2O AutoML feature selection (relevance < 1.0) also needs a Java runtime.
+h2o>=3.44.0.1

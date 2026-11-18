@@ -589,7 +589,7 @@ class TestH2OSelector:
                 selector.fit(h2o_train)
         message = str(excinfo.value)
         assert message == H2O_INSTALL_HINT
-        assert "atlantic[h2o]" in message and "relevance=1.0" in message
+        assert "pip install" in message and "relevance=1.0" in message
         assert isinstance(excinfo.value, FeatureSelectionError)
         assert not selector.is_fitted
 

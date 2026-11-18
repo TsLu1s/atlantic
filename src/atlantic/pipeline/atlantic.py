@@ -299,7 +299,7 @@ class Atlantic(BasePipeline, BuilderPipeline):
                 used to compare preprocessing candidates (0.5 - 0.98).
             relevance: Share of H2O feature importance to retain (0.4 - 1.0).
                 ``1.0`` skips H2O feature selection entirely; any lower value
-                requires the optional ``h2o`` dependency and Java.
+                runs H2O AutoML, which needs a Java runtime.
             h2o_fs_models: Number of H2O AutoML models for feature selection.
             encoding_fs: Label-encode categoricals before H2O selection.
             vif_ratio: VIF threshold for multicollinearity filtering (3 - 30).

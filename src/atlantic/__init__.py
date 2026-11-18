@@ -9,8 +9,8 @@ imputation methods.
 Example:
     >>> from atlantic import Atlantic
     >>>
-    >>> # Direct usage (relevance=1.0 skips the optional H2O feature selection;
-    >>> # relevance<1.0 needs `pip install "atlantic[h2o]"` and Java)
+    >>> # Direct usage (relevance=1.0 skips H2O feature selection;
+    >>> # relevance<1.0 runs H2O AutoML, which needs a Java runtime)
     >>> atl = Atlantic(X=data, target="target_column")
     >>> atl.fit_processing(split_ratio=0.75, relevance=1.0)
     >>> processed = atl.data_processing(X=new_data)

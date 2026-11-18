@@ -4,10 +4,10 @@ Atlantic - Complete Builder Pattern Example.
 Demonstrates all builder configurations and customization options
 for different use cases and scenarios, then fits one of them end to end.
 
-Note: configurations that use ``with_feature_selection(method="h2o")`` need the
-optional H2O dependency and a Java runtime (``pip install "atlantic[h2o]"``).
-They are only *built* here; the pipeline that is actually fitted at the end
-uses ``method="none"`` and runs on a plain ``pip install atlantic``.
+Note: configurations that use ``with_feature_selection(method="h2o")`` start an
+H2O cluster, which needs a Java runtime. They are only *built* here; the
+pipeline that is actually fitted at the end uses ``method="none"`` and runs
+without Java.
 """
 
 from sklearn.model_selection import train_test_split

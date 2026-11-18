@@ -152,7 +152,7 @@ class TestInputValidation:
         monkeypatch.setattr(
             atl, "_prepare_data", lambda *a, **k: pytest.fail("work started before the check")
         )
-        with pytest.raises(H2OConnectionError, match=r"atlantic\[h2o\]") as excinfo:
+        with pytest.raises(H2OConnectionError, match="pip install") as excinfo:
             atl.fit_processing()  # default relevance=0.99 -> H2O requested
         assert "relevance=1.0" in str(excinfo.value)
 

@@ -110,8 +110,7 @@ class AtlanticBuilder:
         """
         Configure feature selection.
 
-        ``method="h2o"`` requires the optional ``h2o`` dependency
-        (``pip install "atlantic[h2o]"``) and a Java runtime;
+        ``method="h2o"`` runs H2O AutoML, which needs a Java runtime;
         ``method="none"`` skips importance-based selection.
 
         Returns:
