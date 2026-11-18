@@ -1,6 +1,6 @@
 <div align="center">
 
-<h1>Atlantic - Automated data preprocessing for supervised machine learning</h1>
+<h1>Atlantic - Automated Data Preprocessing for Supervised Machine Learning</h1>
 
 <p>Feature engineering, feature selection, encoding and imputation, each chosen for your data by validation score.</p>
 
