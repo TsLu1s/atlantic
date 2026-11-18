@@ -124,13 +124,6 @@ Atlantic is published on [PyPI](https://pypi.org/project/atlantic/). One command
 pip install atlantic
 ```
 
-| Requirement | Notes |
-|-------------|-------|
-| **Python** | 3.11 or newer |
-| **Java runtime** | H2O AutoML runs on the JVM, so feature selection (`relevance < 1.0`, the default) needs Java installed. Check with `java -version`. |
-
-> **No Java available?** Pass `relevance=1.0` to `fit_processing` (or `with_feature_selection(method="none")` in the builder). Everything else in Atlantic runs without it.
-
 ---
 
 ## Quick start
