@@ -8,13 +8,13 @@
 
 [![PyPI][pypi-shield]][pypi-url]
 [![Python][python-shield]][pypi-url]
-[![Downloads][downloads-shield]][downloads-url]
-[![Month Downloads][downloads-month-shield]][downloads-url]
 [![MIT License][license-shield]][license-url]
-<br>
 [![Contributors][contributors-shield]][contributors-url]
 [![Stargazers][stars-shield]][stars-url]
 [![LinkedIn][linkedin-shield]][linkedin-url]
+<br>
+[![Downloads][downloads-shield]][downloads-url]
+[![Month Downloads][downloads-month-shield]][downloads-url]
 
 <p>
   <a href="#overview">Overview</a> &nbsp;·&nbsp;
@@ -457,8 +457,8 @@ Distributed under the MIT License. See [LICENSE](https://github.com/TsLu1s/atlan
 [pypi-shield]: https://img.shields.io/pypi/v/atlantic.svg?style=for-the-badge&logo=pypi&logoColor=white
 [pypi-url]: https://pypi.org/project/atlantic/
 [python-shield]: https://img.shields.io/pypi/pyversions/atlantic.svg?style=for-the-badge&logo=python&logoColor=white
-[downloads-shield]: https://img.shields.io/pepy/dt/atlantic?style=for-the-badge&label=downloads
-[downloads-month-shield]: https://img.shields.io/pypi/dm/atlantic.svg?style=for-the-badge
+[downloads-shield]: https://static.pepy.tech/personalized-badge/atlantic?period=total&units=international_system&left_color=grey&right_color=blue&left_text=Total%20Downloads
+[downloads-month-shield]: https://static.pepy.tech/personalized-badge/atlantic?period=month&units=international_system&left_color=grey&right_color=blue&left_text=Month%20Downloads
 [downloads-url]: https://pepy.tech/project/atlantic
 [license-shield]: https://img.shields.io/github/license/TsLu1s/Atlantic.svg?style=for-the-badge&logo=opensource&logoColor=white
 [license-url]: https://github.com/TsLu1s/Atlantic/blob/main/LICENSE
