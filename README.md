@@ -409,12 +409,6 @@ test = h2o_selector.transform(test)
 
 ---
 
-## Built with
-
-[H2O.ai AutoML](https://docs.h2o.ai/h2o/latest-stable/h2o-docs/automl.html) · [scikit-learn](https://scikit-learn.org/stable/) · [XGBoost](https://xgboost.readthedocs.io/en/stable/) · [Optuna](https://optuna.org/) · [pandas](https://pandas.pydata.org/)
-
----
-
 ## Citation
 
 If Atlantic supports your work, please cite the accompanying paper:
