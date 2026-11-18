@@ -2,15 +2,12 @@
 
 <h1>Atlantic - Automated Data Preprocessing for Supervised Machine Learning</h1>
 
-<p>Feature engineering, feature selection, encoding and imputation, each chosen for your data by validation score.</p>
-
 [![PyPI][pypi-shield]][pypi-url]
 [![Python][python-shield]][pypi-url]
 [![MIT License][license-shield]][license-url]
 [![Contributors][contributors-shield]][contributors-url]
 [![Stargazers][stars-shield]][stars-url]
 [![LinkedIn][linkedin-shield]][linkedin-url]
-<br>
 [![Downloads][downloads-shield]][downloads-url]
 [![Month Downloads][downloads-month-shield]][downloads-url]
 
